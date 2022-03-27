@@ -18,11 +18,12 @@ type SortEvent struct {
 	CowName     int16
 	Transponder int32
 	RawPayload  []byte
-	// Flags       []byte
-	Flags   int16
-	SortDst string
-	Src     gopacket.Endpoint
-	Dst     gopacket.Endpoint
+	Flags       int16
+	SortSrc     string
+	SortDst     string
+	Gate        string
+	Src         gopacket.Endpoint
+	Dst         gopacket.Endpoint
 }
 
 type SortRequest struct {
@@ -36,24 +37,33 @@ type SortRequest struct {
 }
 
 func main() {
-	// sortings := make([]SortEvent, 0, 128)
-	// sortRequests := make([]SortRequest, 0, 128)
+	srChan := make(chan SortEvent, 1e2)
 
-	srChan := make(chan SortEvent, 1e3)
-	go LiveInfo(srChan)
+	expFile, err := os.Create("test2.csv")
+	check(err)
+	defer expFile.Close()
+	go LiveInfo(srChan, expFile)
 
-	pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
+	// pcapIn, err := pcap.OpenLive("\\Device\\NPF_{AD59F58A-17B2-41E0-AADE-1CF3F5996945}", 400, true, pcap.BlockForever)
+	pcapIn, err := pcap.OpenOffline("20220324_RoboCap04.cap")
 	check(err)
 	packetSource := gopacket.NewPacketSource(pcapIn, pcapIn.LinkType())
 
 	go handlePacket(packetSource.Packets(), srChan)
 
-	pcapIn.Close()
+	for {
+		time.Sleep(10 * time.Second)
+	}
+
+	// defer pcapIn.Close()
 }
 
-func LiveInfo(seIn <-chan SortEvent) {
-	se := <-seIn
-	ShowSortEvent(se)
+func LiveInfo(seIn <-chan SortEvent, expFile *os.File) {
+	for {
+		se := <-seIn
+		ExportSortEvent(se, expFile)
+		ShowSortEvent(se)
+	}
 }
 
 func ShowSortRequest(sr SortRequest) {
@@ -69,36 +79,39 @@ func ShowSortEvent(se SortEvent) {
 	fmt.Println(se.Src, "->", se.Dst)
 	fmt.Println("Transponder: ", se.Transponder)
 	fmt.Println("CowName: ", se.CowName)
+	fmt.Println("At gate: ", se.Gate)
+	fmt.Println("Coming from: ", se.SortSrc)
 	fmt.Println("Sorting to: ", se.SortDst)
 }
 
-func ExportSortEvents(sortings *[]SortEvent, filename string) {
+func ExportSortEvent(se SortEvent, f *os.File) {
 	// export format: time, transponder, cowname, destination
-	f, err := os.Create(filename)
-	check(err)
-	defer f.Close()
-
-	for _, se := range *sortings {
-		fmt.Fprintf(f, "%v,%v,%v,%v\n", se.Time, se.Transponder, se.CowName, se.SortDst)
-	}
+	fmt.Fprintf(f, "%v,%v,%v,%v,%v,%v\n", se.Time, se.Transponder, se.CowName, se.SortSrc, se.SortDst, se.Gate)
 }
 
 // func handlePacket(packetsChan <-chan gopacket.Packet, sortings *[]SortEvent, sortRequests *[]SortRequest) {
 func handlePacket(packetsChan <-chan gopacket.Packet, srChan chan<- SortEvent) {
-	packet := <-packetsChan
+	for {
+		packet := <-packetsChan
 
-	if udp := packet.Layer(layers.LayerTypeUDP); udp != nil && len(udp.LayerPayload()) > 4 {
-		if udp.LayerPayload()[0] == 0x00 && udp.LayerPayload()[1] == 0x05 && udp.LayerPayload()[2] == 0x01 && udp.LayerPayload()[3] == 0x0a {
-			if len(udp.LayerPayload()) == 18 && packet.Metadata().CaptureLength == 60 {
-				// sortRequest := decodeSortRequest(packet)
-				// *sortRequests = append(*sortRequests, sortRequest)
-				return
-			}
-			if len(udp.LayerPayload()) == 222 && packet.Metadata().CaptureLength == 264 {
-				// sorting := decodeSortEvent(packet)
-				// *sortings = append(*sortings, sorting)
-				srChan <- decodeSortEvent(packet)
-				return
+		// fmt.Println(packet.Metadata().Timestamp)
+
+		if udp := packet.Layer(layers.LayerTypeUDP); udp != nil && len(udp.LayerPayload()) > 4 {
+			if udp.LayerPayload()[0] == 0x00 && udp.LayerPayload()[1] == 0x05 && udp.LayerPayload()[2] == 0x01 && udp.LayerPayload()[3] == 0x0a {
+				if len(udp.LayerPayload()) == 18 && packet.Metadata().CaptureLength == 60 {
+					// sortRequest := decodeSortRequest(packet)
+					// *sortRequests = append(*sortRequests, sortRequest)
+					continue
+				}
+				if len(udp.LayerPayload()) == 222 && packet.Metadata().CaptureLength == 264 {
+					// sorting := decodeSortEvent(packet)
+					// *sortings = append(*sortings, sorting)
+					se := decodeSortEvent(packet)
+					if se.RawPayload[202] != 0x64 {
+						srChan <- se
+						continue
+					}
+				}
 			}
 		}
 	}
@@ -158,6 +171,38 @@ func GetSortingResult(se SortEvent) string {
 	}
 }
 
+func IpToRoboter(ip string) string {
+	switch ip {
+	case "172.17.172.201":
+		return "Gate NL"
+
+	case "172.17.172.202":
+		return "Gate Ausgang Melkbereich"
+
+	case "172.17.172.204":
+		return "Gate HL"
+
+	default:
+		panic("Invalid ip")
+	}
+}
+
+func findOrigin(gate string) string {
+	switch gate {
+	case "Gate Ausgang Melkbereich":
+		return "Melkbereich"
+
+	case "Gate NL":
+		return "Fressbereich NL"
+
+	case "Gate HL":
+		return "Fressbereich HL"
+
+	default:
+		panic("Unknown gate")
+	}
+}
+
 func decodeSortRequest(packet gopacket.Packet) SortRequest {
 	var sortRequest SortRequest
 	payload := packet.Layer(layers.LayerTypeUDP).LayerPayload()
@@ -212,6 +257,11 @@ func decodeSortEvent(packet gopacket.Packet) SortEvent {
 	// sorting.Flags = flagsRaw
 
 	sorting.SortDst = GetSortingResult(sorting)
+
+	if sorting.Dst.String() != "172.17.172.203" {
+		sorting.Gate = IpToRoboter(sorting.Dst.String())
+		sorting.SortSrc = findOrigin(sorting.Gate)
+	}
 
 	return sorting
 }
