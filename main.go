@@ -17,9 +17,10 @@ type SortEvent struct {
 	CowName     int16
 	Transponder int32
 	RawPayload  []byte
-	Flags       []byte
-	Src         gopacket.Endpoint
-	Dst         gopacket.Endpoint
+	// Flags       []byte
+	Flags int16
+	Src   gopacket.Endpoint
+	Dst   gopacket.Endpoint
 }
 
 type SortRequest struct {
@@ -29,6 +30,7 @@ type SortRequest struct {
 	RawPayload  []byte
 	Src         gopacket.Endpoint
 	Dst         gopacket.Endpoint
+	Num1        byte
 }
 
 func main() {
@@ -43,36 +45,107 @@ func main() {
 		check(err)
 
 		if packet.Metadata().Timestamp.After(t) {
-			handlePacket(packet, sortings, sortRequests)
+			handlePacket(packet, &sortings, &sortRequests)
 		}
 	}
 	handle.Close()
 
-	for _, sorting := range sortings {
-		if sorting.CowName == 3055 {
-			fmt.Printf("\n\n")
-			fmt.Println("Time: ", sorting.Time)
-			fmt.Println("Transponder: ", sorting.Transponder)
-			fmt.Println("CowName: ", sorting.CowName)
-			printHex(sorting.RawPayload)
+	for i := 0; i < 100; i++ {
+		ShowSortRequest(sortRequests[i])
+		ShowSortEvent(sortings[i])
+	}
+
+}
+
+func ShowSortRequest(sr SortRequest) {
+	fmt.Printf("\n\n")
+	fmt.Println("Time: ", sr.Time)
+	fmt.Println(sr.Src, "->", sr.Dst)
+	fmt.Println("Transponder: ", sr.Transponder)
+	// printHex(sr.RawPayload)
+}
+
+func ShowSortEvent(se SortEvent) {
+	result := GetSortingResult(se)
+
+	fmt.Printf("\n\n")
+	fmt.Println("Time: ", se.Time)
+	fmt.Println(se.Src, "->", se.Dst)
+	fmt.Println("Transponder: ", se.Transponder)
+	fmt.Println("CowName: ", se.CowName)
+	fmt.Println("Flags: ", se.Flags)
+	fmt.Println("Sorting to: ", result)
+	// printHex(se.RawPayload)
+}
+
+func handlePacket(packet gopacket.Packet, sortings *[]SortEvent, sortRequests *[]SortRequest) {
+	if udp := packet.Layer(layers.LayerTypeUDP); udp != nil && len(udp.LayerPayload()) > 4 {
+		if udp.LayerPayload()[0] == 0x00 && udp.LayerPayload()[1] == 0x05 && udp.LayerPayload()[2] == 0x01 && udp.LayerPayload()[3] == 0x0a {
+			if len(udp.LayerPayload()) == 18 && packet.Metadata().CaptureLength == 60 {
+				sortRequest := decodeSortRequest(packet)
+				*sortRequests = append(*sortRequests, sortRequest)
+				return
+			}
+			if len(udp.LayerPayload()) == 222 && packet.Metadata().CaptureLength == 264 {
+				sorting := decodeSortEvent(packet)
+				*sortings = append(*sortings, sorting)
+				return
+			}
 		}
 	}
 }
 
-func handlePacket(packet gopacket.Packet, sortings []SortEvent, sortRequests []SortRequest) {
-	if udp := packet.Layer(layers.LayerTypeUDP); udp != nil {
-		if udp.LayerPayload()[0] == 0x00 && udp.LayerPayload()[1] == 0x05 && udp.LayerPayload()[2] == 0x01 && udp.LayerPayload()[3] == 0x0a {
-			if len(udp.LayerPayload()) == 18 {
-				sortRequest := decodeSortRequest(packet)
-				sortRequests = append(sortRequests, sortRequest)
-				return
-			}
-			if len(udp.LayerPayload()) > 21 {
-				sorting := decodeSortEvent(packet)
-				sortings = append(sortings, sorting)
-				return
-			}
+func GetSortingResult(se SortEvent) string {
+	switch se.Dst.String() {
+	case "172.17.172.201":
+		if se.RawPayload[202] == 0x64 {
+			return "Melkroboter 1"
 		}
+		switch se.Flags {
+		case 0:
+			return "Liegebox NL"
+		case 128:
+			return "Melkroboterbereich"
+		default:
+			panic("Unknown flag")
+		}
+
+	case "172.17.172.202":
+		if se.RawPayload[202] == 0x64 {
+			return "Melkroboter 2"
+		}
+		switch se.Flags {
+		case 0:
+			return "Liegebox HL"
+		case 256:
+			return "Melkroboterbereich"
+		case 512:
+			return "Liegebox NL"
+		default:
+			panic("Unknown flag")
+		}
+
+	case "172.17.172.203":
+		if se.RawPayload[202] == 0x64 {
+			return "Melkroboter 3"
+		}
+		panic("Roboter with ip ..203 can only sort to Melkroboter 3")
+
+	case "172.17.172.204":
+		if se.RawPayload[202] == 0x64 {
+			return "Melkroboter 4"
+		}
+		switch se.Flags {
+		case 0:
+			return "Liegebox HL"
+		case 128:
+			return "Melkroboterbereich"
+		default:
+			panic("Unknown flag")
+		}
+
+	default:
+		panic("Unknown destination")
 	}
 }
 
@@ -83,11 +156,17 @@ func decodeSortRequest(packet gopacket.Packet) SortRequest {
 	sortRequest.RawPayload = payload
 	sortRequest.Time = packet.Metadata().Timestamp
 	sortRequest.Dst = packet.NetworkLayer().NetworkFlow().Dst()
-	sortRequest.Src = packet.LinkLayer().LinkFlow().Src()
+	sortRequest.Src = packet.NetworkLayer().NetworkFlow().Src()
+	sortRequest.Num1 = payload[17]
 
-	indexRaw := payload[4:5]
+	indexRaw := payload[4:6]
 	buf := bytes.NewReader(indexRaw)
 	err := binary.Read(buf, binary.BigEndian, &sortRequest.Index)
+	check(err)
+
+	transponderRaw := payload[12:16]
+	buf = bytes.NewReader(transponderRaw)
+	err = binary.Read(buf, binary.BigEndian, &sortRequest.Transponder)
 	check(err)
 
 	return sortRequest
@@ -100,10 +179,11 @@ func decodeSortEvent(packet gopacket.Packet) SortEvent {
 	sorting.RawPayload = payload
 	sorting.Time = packet.Metadata().Timestamp
 	sorting.Dst = packet.NetworkLayer().NetworkFlow().Dst()
-	sorting.Src = packet.LinkLayer().LinkFlow().Src()
+	sorting.Src = packet.NetworkLayer().NetworkFlow().Src()
 	cowNameRaw := payload[20:22]
 	transponderRaw := payload[12:16]
-	indexRaw := payload[4:5]
+	indexRaw := payload[4:6]
+	flagsRaw := payload[194:196]
 
 	buf := bytes.NewReader(cowNameRaw)
 	err := binary.Read(buf, binary.BigEndian, &sorting.CowName)
@@ -116,6 +196,11 @@ func decodeSortEvent(packet gopacket.Packet) SortEvent {
 	buf = bytes.NewReader(indexRaw)
 	err = binary.Read(buf, binary.BigEndian, &sorting.Index)
 	check(err)
+
+	buf = bytes.NewReader(flagsRaw)
+	err = binary.Read(buf, binary.BigEndian, &sorting.Flags)
+	check(err)
+	// sorting.Flags = flagsRaw
 
 	return sorting
 }
