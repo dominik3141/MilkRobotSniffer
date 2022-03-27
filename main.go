@@ -52,14 +52,7 @@ func main() {
 	}
 	handle.Close()
 
-	// for _, se := range sortings {
-	// 	if se.CowName == 3162 {
-	// 		ShowSortEvent(se)
-	// 	}
-	// }
-
 	for i := 0; i < 100; i++ {
-		// ShowSortRequest(sortRequests[i])
 		ShowSortEvent(sortings[i])
 		ExportSortEvents(&sortings, "test1.csv")
 	}
@@ -70,7 +63,6 @@ func ShowSortRequest(sr SortRequest) {
 	fmt.Println("Time: ", sr.Time)
 	fmt.Println(sr.Src, "->", sr.Dst)
 	fmt.Println("Transponder: ", sr.Transponder)
-	// printHex(sr.RawPayload)
 }
 
 func ShowSortEvent(se SortEvent) {
@@ -79,9 +71,7 @@ func ShowSortEvent(se SortEvent) {
 	fmt.Println(se.Src, "->", se.Dst)
 	fmt.Println("Transponder: ", se.Transponder)
 	fmt.Println("CowName: ", se.CowName)
-	// fmt.Println("Flags: ", se.Flags)
 	fmt.Println("Sorting to: ", se.SortDst)
-	// printHex(se.RawPayload)
 }
 
 func ExportSortEvents(sortings *[]SortEvent, filename string) {
