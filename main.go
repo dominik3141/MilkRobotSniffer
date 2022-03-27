@@ -39,7 +39,8 @@ type SortRequest struct {
 func main() {
 	srChan := make(chan SortEvent, 1e2)
 
-	expFile, err := os.Create("test2.csv")
+	filename := time.Now().String() + ".csv"
+	expFile, err := os.Create(filename)
 	check(err)
 	defer expFile.Close()
 	go LiveInfo(srChan, expFile)
