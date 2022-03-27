@@ -18,9 +18,10 @@ type SortEvent struct {
 	Transponder int32
 	RawPayload  []byte
 	// Flags       []byte
-	Flags int16
-	Src   gopacket.Endpoint
-	Dst   gopacket.Endpoint
+	Flags   int16
+	SortDst string
+	Src     gopacket.Endpoint
+	Dst     gopacket.Endpoint
 }
 
 type SortRequest struct {
@@ -50,11 +51,16 @@ func main() {
 	}
 	handle.Close()
 
+	// for _, se := range sortings {
+	// 	if se.CowName == 3162 {
+	// 		ShowSortEvent(se)
+	// 	}
+	// }
+
 	for i := 0; i < 100; i++ {
-		ShowSortRequest(sortRequests[i])
+		// ShowSortRequest(sortRequests[i])
 		ShowSortEvent(sortings[i])
 	}
-
 }
 
 func ShowSortRequest(sr SortRequest) {
@@ -66,15 +72,13 @@ func ShowSortRequest(sr SortRequest) {
 }
 
 func ShowSortEvent(se SortEvent) {
-	result := GetSortingResult(se)
-
 	fmt.Printf("\n\n")
 	fmt.Println("Time: ", se.Time)
 	fmt.Println(se.Src, "->", se.Dst)
 	fmt.Println("Transponder: ", se.Transponder)
 	fmt.Println("CowName: ", se.CowName)
-	fmt.Println("Flags: ", se.Flags)
-	fmt.Println("Sorting to: ", result)
+	// fmt.Println("Flags: ", se.Flags)
+	fmt.Println("Sorting to: ", se.SortDst)
 	// printHex(se.RawPayload)
 }
 
@@ -201,6 +205,8 @@ func decodeSortEvent(packet gopacket.Packet) SortEvent {
 	err = binary.Read(buf, binary.BigEndian, &sorting.Flags)
 	check(err)
 	// sorting.Flags = flagsRaw
+
+	sorting.SortDst = GetSortingResult(sorting)
 
 	return sorting
 }
