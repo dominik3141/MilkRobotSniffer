@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/google/gopacket"
@@ -60,6 +61,7 @@ func main() {
 	for i := 0; i < 100; i++ {
 		// ShowSortRequest(sortRequests[i])
 		ShowSortEvent(sortings[i])
+		ExportSortEvents(&sortings, "test1.csv")
 	}
 }
 
@@ -80,6 +82,17 @@ func ShowSortEvent(se SortEvent) {
 	// fmt.Println("Flags: ", se.Flags)
 	fmt.Println("Sorting to: ", se.SortDst)
 	// printHex(se.RawPayload)
+}
+
+func ExportSortEvents(sortings *[]SortEvent, filename string) {
+	// export format: time, transponder, cowname, destination
+	f, err := os.Create(filename)
+	check(err)
+	defer f.Close()
+
+	for _, se := range *sortings {
+		fmt.Fprintf(f, "%v,%v,%v,%v\n", se.Time, se.Transponder, se.CowName, se.SortDst)
+	}
 }
 
 func handlePacket(packet gopacket.Packet, sortings *[]SortEvent, sortRequests *[]SortRequest) {
