@@ -36,26 +36,24 @@ type SortRequest struct {
 }
 
 func main() {
-	sortings := make([]SortEvent, 0, 128)
-	sortRequests := make([]SortRequest, 0, 128)
+	// sortings := make([]SortEvent, 0, 128)
+	// sortRequests := make([]SortRequest, 0, 128)
 
-	handle, err := pcap.OpenOffline("20220324_RoboCap04.cap")
+	srChan := make(chan SortEvent, 1e3)
+	go LiveInfo(srChan)
+
+	pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
 	check(err)
-	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-	for packet := range packetSource.Packets() {
-		t, err := time.Parse("2006-01-02 15:04:05", "2022-03-24 16:45:00")
-		check(err)
+	packetSource := gopacket.NewPacketSource(pcapIn, pcapIn.LinkType())
 
-		if packet.Metadata().Timestamp.After(t) {
-			handlePacket(packet, &sortings, &sortRequests)
-		}
-	}
-	handle.Close()
+	go handlePacket(packetSource.Packets(), srChan)
 
-	for i := 0; i < 100; i++ {
-		ShowSortEvent(sortings[i])
-		ExportSortEvents(&sortings, "test1.csv")
-	}
+	pcapIn.Close()
+}
+
+func LiveInfo(seIn <-chan SortEvent) {
+	se := <-seIn
+	ShowSortEvent(se)
 }
 
 func ShowSortRequest(sr SortRequest) {
@@ -85,17 +83,21 @@ func ExportSortEvents(sortings *[]SortEvent, filename string) {
 	}
 }
 
-func handlePacket(packet gopacket.Packet, sortings *[]SortEvent, sortRequests *[]SortRequest) {
+// func handlePacket(packetsChan <-chan gopacket.Packet, sortings *[]SortEvent, sortRequests *[]SortRequest) {
+func handlePacket(packetsChan <-chan gopacket.Packet, srChan chan<- SortEvent) {
+	packet := <-packetsChan
+
 	if udp := packet.Layer(layers.LayerTypeUDP); udp != nil && len(udp.LayerPayload()) > 4 {
 		if udp.LayerPayload()[0] == 0x00 && udp.LayerPayload()[1] == 0x05 && udp.LayerPayload()[2] == 0x01 && udp.LayerPayload()[3] == 0x0a {
 			if len(udp.LayerPayload()) == 18 && packet.Metadata().CaptureLength == 60 {
-				sortRequest := decodeSortRequest(packet)
-				*sortRequests = append(*sortRequests, sortRequest)
+				// sortRequest := decodeSortRequest(packet)
+				// *sortRequests = append(*sortRequests, sortRequest)
 				return
 			}
 			if len(udp.LayerPayload()) == 222 && packet.Metadata().CaptureLength == 264 {
-				sorting := decodeSortEvent(packet)
-				*sortings = append(*sortings, sorting)
+				// sorting := decodeSortEvent(packet)
+				// *sortings = append(*sortings, sorting)
+				srChan <- decodeSortEvent(packet)
 				return
 			}
 		}
@@ -236,7 +238,8 @@ func ShowPacketInfo(packet gopacket.Packet) {
 	payload := packet.Layer(layers.LayerTypeUDP).LayerPayload()
 
 	fmt.Printf("\n\n")
-	fmt.Println(readable_timestamp, src, "->", dst, "Unix Miliseconds:", timestamp.UnixMilli())
+	// fmt.Println(readable_timestamp, src, "->", dst, " Miliseconds:", timestamp.UnixMilli())
+	fmt.Println(readable_timestamp, src, "->", dst)
 	fmt.Printf("PAYLOAD: % x\n", payload)
 	printHex(payload)
 	fmt.Printf("\n")
