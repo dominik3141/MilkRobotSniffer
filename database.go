@@ -27,9 +27,33 @@ func createDb(dbName string) {
 		Gate INTEGER NOT NULL)`)
 	check(err)
 
-	// create view ...
+	_, err = db.Exec(`create table LocationIdToName(locationId integer, name text);
+		insert into LocationIdToName values
+		(1, "Melkroboter 1"),
+		(2, "Liegebox NL"),
+		(3, "Melkroboterbereich"),
+		(4, "Melkroboter 2"),
+		(5, "Liegebox HL"),
+		(6, "Melkroboter 3"),
+		(7, "Melkroboter 4"),
+		(8, "Fressbereich NL"),
+		(9, "Fressbereich HL")`)
+	check(err)
 
-	// create id to name tables ...
+	_, err = db.Exec(`create table GateIdToName(gateId int, name text);
+		insert into GateIdToName values
+		(1, "Gate NL"),
+		(2, "Gate HL"),
+		(3, "Gate Ausgang Melkbereich")`)
+	check(err)
+
+	_, err = db.Exec(`create view selections as
+	select "Time", CowNr, GateIdToName.name as GateName, Origin.Name as Origin, Dst.Name as Dst
+	from Sortings
+	join LocationIdToName as Dst on Sortings.SortDst = Dst.locationId
+	join LocationIdToName as Origin on Sortings.SortOri = Origin.locationId
+	join GateIdToName on Sortings.Gate=GateIdToName.gateId`)
+	check(err)
 
 	db.Close()
 }
@@ -46,7 +70,7 @@ func insertSortEvent(se SortEvent, db *sql.DB) {
 	tx, err := db.Begin()
 	check(err)
 	_, err = tx.Exec(`INSERT INTO Sortings("Index", "Time", Transponder, CowNr, SortOri, SortDst, Gate)
-		 VALUES (?,?,?,?,?,?,?)`, se.Index, se.Time, se.Transponder, se.CowName, se.SortSrc.Id, se.SortDst.Id, se.Gate.Id)
+		 VALUES (?,?,?,?,?,?,?)`, se.Index, se.Time.Format("2006-01-02 15:04:05"), se.Transponder, se.CowName, se.SortSrc.Id, se.SortDst.Id, se.Gate.Id)
 	check(err)
 	err = tx.Commit()
 	check(err)

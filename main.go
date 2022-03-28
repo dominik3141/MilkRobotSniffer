@@ -62,10 +62,6 @@ func main() {
 
 	srChan := make(chan SortEvent, 1e2)
 
-	filename := time.Now().Format("2006_01_02_15_04_05") + ".csv"
-	expFile, err := os.Create(filename)
-	check(err)
-	defer expFile.Close()
 	go SaveAndShowSE(srChan, db)
 
 	// pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
@@ -90,14 +86,14 @@ func SaveAndShowSE(seIn <-chan SortEvent, db *sql.DB) {
 
 func ShowSortRequest(sr SortRequest) {
 	fmt.Printf("\n\n")
-	fmt.Println("Time: ", sr.Time)
+	fmt.Println("Time: ", sr.Time.Format("2006-01-02 15:04:05"))
 	fmt.Println(sr.Src, "->", sr.Dst)
 	fmt.Println("Transponder: ", sr.Transponder)
 }
 
 func ShowSortEvent(se SortEvent) {
 	fmt.Printf("\n\n")
-	fmt.Println("Time: ", se.Time)
+	fmt.Println("Time: ", se.Time.Format("2006-01-02 15:04:05"))
 	fmt.Println(se.IpSrc, "->", se.IpDst)
 	fmt.Println("Transponder: ", se.Transponder)
 	fmt.Println("CowName: ", se.CowName)
