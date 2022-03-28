@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -48,8 +49,15 @@ type Gate struct {
 }
 
 func main() {
-	createDb("testdb01.db")
-	db := openDb("testdb01.db")
+	createNewDb := flag.Bool("createdb", false, "Use this flag if a new database should be created")
+	dbName := flag.String("db", "testdb01.db", "Path to the database")
+	flag.Parse()
+
+	if *createNewDb {
+		createDb(*dbName)
+	}
+
+	db := openDb(*dbName)
 	defer db.Close()
 
 	srChan := make(chan SortEvent, 1e2)
