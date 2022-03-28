@@ -39,14 +39,15 @@ type SortRequest struct {
 func main() {
 	srChan := make(chan SortEvent, 1e2)
 
-	filename := time.Now().String() + ".csv"
+	filename := time.Now().Format("2006_01_02_15_04_05") + ".csv"
 	expFile, err := os.Create(filename)
 	check(err)
 	defer expFile.Close()
 	go LiveInfo(srChan, expFile)
 
 	// pcapIn, err := pcap.OpenLive("\\Device\\NPF_{AD59F58A-17B2-41E0-AADE-1CF3F5996945}", 400, true, pcap.BlockForever)
-	pcapIn, err := pcap.OpenOffline("20220324_RoboCap04.cap")
+	pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
+	// pcapIn, err := pcap.OpenOffline("20220324_RoboCap04.cap")
 	check(err)
 	packetSource := gopacket.NewPacketSource(pcapIn, pcapIn.LinkType())
 
