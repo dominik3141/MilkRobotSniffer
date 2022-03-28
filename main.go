@@ -19,11 +19,11 @@ type SortEvent struct {
 	Transponder int32
 	RawPayload  []byte
 	Flags       int16
-	SortSrc     string
-	SortDst     string
-	Gate        string
-	Src         gopacket.Endpoint
-	Dst         gopacket.Endpoint
+	SortSrc     BarnLocation
+	SortDst     BarnLocation
+	Gate        Gate
+	IpSrc       gopacket.Endpoint
+	IpDst       gopacket.Endpoint
 }
 
 type SortRequest struct {
@@ -36,7 +36,18 @@ type SortRequest struct {
 	Num1        byte
 }
 
+type BarnLocation struct {
+	Id   int
+	Name string
+}
+
+type Gate struct {
+	Id   int
+	Name string
+}
+
 func main() {
+
 	srChan := make(chan SortEvent, 1e2)
 
 	filename := time.Now().Format("2006_01_02_15_04_05") + ".csv"
@@ -45,7 +56,6 @@ func main() {
 	defer expFile.Close()
 	go LiveInfo(srChan, expFile)
 
-	// pcapIn, err := pcap.OpenLive("\\Device\\NPF_{AD59F58A-17B2-41E0-AADE-1CF3F5996945}", 400, true, pcap.BlockForever)
 	pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
 	// pcapIn, err := pcap.OpenOffline("20220324_RoboCap04.cap")
 	check(err)
@@ -56,8 +66,6 @@ func main() {
 	for {
 		time.Sleep(10 * time.Second)
 	}
-
-	// defer pcapIn.Close()
 }
 
 func LiveInfo(seIn <-chan SortEvent, expFile *os.File) {
@@ -78,7 +86,7 @@ func ShowSortRequest(sr SortRequest) {
 func ShowSortEvent(se SortEvent) {
 	fmt.Printf("\n\n")
 	fmt.Println("Time: ", se.Time)
-	fmt.Println(se.Src, "->", se.Dst)
+	fmt.Println(se.IpSrc, "->", se.IpDst)
 	fmt.Println("Transponder: ", se.Transponder)
 	fmt.Println("CowName: ", se.CowName)
 	fmt.Println("At gate: ", se.Gate)
@@ -87,27 +95,19 @@ func ShowSortEvent(se SortEvent) {
 }
 
 func ExportSortEvent(se SortEvent, f *os.File) {
-	// export format: time, transponder, cowname, destination
 	fmt.Fprintf(f, "%v,%v,%v,%v,%v,%v\n", se.Time, se.Transponder, se.CowName, se.SortSrc, se.SortDst, se.Gate)
 }
 
-// func handlePacket(packetsChan <-chan gopacket.Packet, sortings *[]SortEvent, sortRequests *[]SortRequest) {
 func handlePacket(packetsChan <-chan gopacket.Packet, srChan chan<- SortEvent) {
 	for {
 		packet := <-packetsChan
 
-		// fmt.Println(packet.Metadata().Timestamp)
-
 		if udp := packet.Layer(layers.LayerTypeUDP); udp != nil && len(udp.LayerPayload()) > 4 {
 			if udp.LayerPayload()[0] == 0x00 && udp.LayerPayload()[1] == 0x05 && udp.LayerPayload()[2] == 0x01 && udp.LayerPayload()[3] == 0x0a {
 				if len(udp.LayerPayload()) == 18 && packet.Metadata().CaptureLength == 60 {
-					// sortRequest := decodeSortRequest(packet)
-					// *sortRequests = append(*sortRequests, sortRequest)
 					continue
 				}
 				if len(udp.LayerPayload()) == 222 && packet.Metadata().CaptureLength == 264 {
-					// sorting := decodeSortEvent(packet)
-					// *sortings = append(*sortings, sorting)
 					se := decodeSortEvent(packet)
 					if se.RawPayload[202] != 0x64 {
 						srChan <- se
@@ -120,7 +120,7 @@ func handlePacket(packetsChan <-chan gopacket.Packet, srChan chan<- SortEvent) {
 }
 
 func GetSortingResult(se SortEvent) string {
-	switch se.Dst.String() {
+	switch se.IpDst.String() {
 	case "172.17.172.201":
 		if se.RawPayload[202] == 0x64 {
 			return "Melkroboter 1"
@@ -173,7 +173,7 @@ func GetSortingResult(se SortEvent) string {
 	}
 }
 
-func IpToRoboter(ip string) string {
+func IpToGate(ip string) string {
 	switch ip {
 	case "172.17.172.201":
 		return "Gate NL"
@@ -189,7 +189,7 @@ func IpToRoboter(ip string) string {
 	}
 }
 
-func findOrigin(gate string) string {
+func GateToOrigin(gate string) string {
 	switch gate {
 	case "Gate Ausgang Melkbereich":
 		return "Melkbereich"
@@ -229,13 +229,33 @@ func decodeSortRequest(packet gopacket.Packet) SortRequest {
 }
 
 func decodeSortEvent(packet gopacket.Packet) SortEvent {
+	BarnLocationNameToId := map[string]int{
+		// "ERROR: Invalid":     0,
+		"Melkroboter 1":      1,
+		"Liegebox NL":        2,
+		"Melkroboterbereich": 3,
+		"Melkroboter 2":      4,
+		"Liegebox HL":        5,
+		"Melkroboter 3":      6,
+		"Melkroboter 4":      7,
+		"Fressbereich NL":    8,
+		"Fressbereich HL":    9,
+	}
+
+	GateNameToId := map[string]int{
+		// "ERROR: Invalid":           0,
+		"Gate NL":                  1,
+		"Gate HL":                  2,
+		"Gate Ausgang Melkbereich": 3,
+	}
+
 	var sorting SortEvent
 	payload := packet.Layer(layers.LayerTypeUDP).LayerPayload()
 
 	sorting.RawPayload = payload
 	sorting.Time = packet.Metadata().Timestamp
-	sorting.Dst = packet.NetworkLayer().NetworkFlow().Dst()
-	sorting.Src = packet.NetworkLayer().NetworkFlow().Src()
+	sorting.IpDst = packet.NetworkLayer().NetworkFlow().Dst()
+	sorting.IpSrc = packet.NetworkLayer().NetworkFlow().Src()
 	cowNameRaw := payload[20:22]
 	transponderRaw := payload[12:16]
 	indexRaw := payload[4:6]
@@ -256,13 +276,16 @@ func decodeSortEvent(packet gopacket.Packet) SortEvent {
 	buf = bytes.NewReader(flagsRaw)
 	err = binary.Read(buf, binary.BigEndian, &sorting.Flags)
 	check(err)
-	// sorting.Flags = flagsRaw
 
-	sorting.SortDst = GetSortingResult(sorting)
+	sorting.SortDst.Name = GetSortingResult(sorting)
+	sorting.SortDst.Id = BarnLocationNameToId[sorting.SortDst.Name]
 
-	if sorting.Dst.String() != "172.17.172.203" {
-		sorting.Gate = IpToRoboter(sorting.Dst.String())
-		sorting.SortSrc = findOrigin(sorting.Gate)
+	if sorting.IpDst.String() != "172.17.172.203" {
+		sorting.Gate.Name = IpToGate(sorting.IpDst.String())
+		sorting.Gate.Id = GateNameToId[sorting.Gate.Name]
+
+		sorting.SortSrc.Name = GateToOrigin(sorting.Gate.Name)
+		sorting.SortSrc.Id = BarnLocationNameToId[sorting.SortSrc.Name]
 	}
 
 	return sorting
@@ -290,7 +313,6 @@ func ShowPacketInfo(packet gopacket.Packet) {
 	payload := packet.Layer(layers.LayerTypeUDP).LayerPayload()
 
 	fmt.Printf("\n\n")
-	// fmt.Println(readable_timestamp, src, "->", dst, " Miliseconds:", timestamp.UnixMilli())
 	fmt.Println(readable_timestamp, src, "->", dst)
 	fmt.Printf("PAYLOAD: % x\n", payload)
 	printHex(payload)
