@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -47,6 +48,9 @@ type Gate struct {
 }
 
 func main() {
+	createDb("testdb01.db")
+	db := openDb("testdb01.db")
+	defer db.Close()
 
 	srChan := make(chan SortEvent, 1e2)
 
@@ -54,24 +58,24 @@ func main() {
 	expFile, err := os.Create(filename)
 	check(err)
 	defer expFile.Close()
-	go LiveInfo(srChan, expFile)
+	go SaveAndShowSE(srChan, db)
 
-	pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
-	// pcapIn, err := pcap.OpenOffline("20220324_RoboCap04.cap")
+	// pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
+	pcapIn, err := pcap.OpenOffline("20220324_RoboCap04.cap")
 	check(err)
 	packetSource := gopacket.NewPacketSource(pcapIn, pcapIn.LinkType())
 
 	go handlePacket(packetSource.Packets(), srChan)
 
 	for {
-		time.Sleep(10 * time.Second)
+		time.Sleep(100 * time.Second)
 	}
 }
 
-func LiveInfo(seIn <-chan SortEvent, expFile *os.File) {
+func SaveAndShowSE(seIn <-chan SortEvent, db *sql.DB) {
 	for {
 		se := <-seIn
-		ExportSortEvent(se, expFile)
+		insertSortEvent(se, db)
 		ShowSortEvent(se)
 	}
 }
@@ -95,7 +99,7 @@ func ShowSortEvent(se SortEvent) {
 }
 
 func ExportSortEvent(se SortEvent, f *os.File) {
-	fmt.Fprintf(f, "%v,%v,%v,%v,%v,%v\n", se.Time, se.Transponder, se.CowName, se.SortSrc, se.SortDst, se.Gate)
+	fmt.Fprintf(f, "%v,%v,%v,%v,%v,%v\n", se.Time, se.Transponder, se.CowName, se.SortSrc.Id, se.SortDst.Id, se.Gate.Id)
 }
 
 func handlePacket(packetsChan <-chan gopacket.Packet, srChan chan<- SortEvent) {
