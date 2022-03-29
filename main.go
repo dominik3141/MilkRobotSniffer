@@ -65,7 +65,7 @@ func main() {
 	go SaveAndShowSE(srChan, db)
 
 	// pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
-	pcapIn, err := pcap.OpenOffline("20220324_RoboCap04.cap")
+	pcapIn, err := pcap.OpenOffline("20220320_RoboCap03.cap")
 	check(err)
 	packetSource := gopacket.NewPacketSource(pcapIn, pcapIn.LinkType())
 
@@ -137,7 +137,7 @@ func GetSortingResult(se SortEvent) string {
 		case 0:
 			return "Liegebox NL"
 		case 128:
-			return "Melkroboterbereich"
+			return "Melkbereich"
 		default:
 			panic("Unknown flag")
 		}
@@ -150,7 +150,7 @@ func GetSortingResult(se SortEvent) string {
 		case 0:
 			return "Liegebox HL"
 		case 256:
-			return "Melkroboterbereich"
+			return "Melkbereich"
 		case 512:
 			return "Liegebox NL"
 		default:
@@ -171,7 +171,7 @@ func GetSortingResult(se SortEvent) string {
 		case 0:
 			return "Liegebox HL"
 		case 128:
-			return "Melkroboterbereich"
+			return "Melkbereich"
 		default:
 			panic("Unknown flag")
 		}
@@ -239,15 +239,15 @@ func decodeSortRequest(packet gopacket.Packet) SortRequest {
 func decodeSortEvent(packet gopacket.Packet) SortEvent {
 	BarnLocationNameToId := map[string]int{
 		// "ERROR: Invalid":     0,
-		"Melkroboter 1":      1,
-		"Liegebox NL":        2,
-		"Melkroboterbereich": 3,
-		"Melkroboter 2":      4,
-		"Liegebox HL":        5,
-		"Melkroboter 3":      6,
-		"Melkroboter 4":      7,
-		"Fressbereich NL":    8,
-		"Fressbereich HL":    9,
+		"Melkroboter 1":   1,
+		"Liegebox NL":     2,
+		"Melkbereich":     3,
+		"Melkroboter 2":   4,
+		"Liegebox HL":     5,
+		"Melkroboter 3":   6,
+		"Melkroboter 4":   7,
+		"Fressbereich NL": 8,
+		"Fressbereich HL": 9,
 	}
 
 	GateNameToId := map[string]int{
