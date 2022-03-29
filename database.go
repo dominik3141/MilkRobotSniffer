@@ -86,3 +86,19 @@ func insertSortEvent(se SortEvent, db *sql.DB) {
 	err = tx.Commit()
 	check(err)
 }
+
+func insertStays(stays []Stay) {
+	db, err := sql.Open("sqlite3", "testdb01.db")
+	check(err)
+	defer db.Close()
+
+	tx, err := db.Begin()
+	check(err)
+	for i, _ := range stays {
+		_, err = tx.Exec(`INSERT INTO Stays(Begin, End, Duration, Location)
+		 VALUES (?,?,?,?)`, stays[i].Begin, stays[i].End, stays[i].Duration(), stays[i].Location)
+		check(err)
+	}
+	err = tx.Commit()
+	check(err)
+}
