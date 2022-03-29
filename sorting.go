@@ -20,6 +20,7 @@ type SortEvent struct {
 	Flags       int16
 	SortSrc     BarnLocation
 	SortDst     BarnLocation
+	DstIsRobo   bool
 	Gate        Gate
 	IpSrc       gopacket.Endpoint
 	IpDst       gopacket.Endpoint
@@ -48,7 +49,8 @@ type Gate struct {
 func GetSortingResult(se SortEvent) string {
 	switch se.IpDst.String() {
 	case "172.17.172.201":
-		if se.RawPayload[202] == 0x64 {
+		// if se.RawPayload[202] == 0x64 {
+		if se.DstIsRobo {
 			return "Melkroboter 1"
 		}
 		switch se.Flags {
@@ -61,7 +63,8 @@ func GetSortingResult(se SortEvent) string {
 		}
 
 	case "172.17.172.202":
-		if se.RawPayload[202] == 0x64 {
+		// if se.RawPayload[202] == 0x64 {
+		if se.DstIsRobo {
 			return "Melkroboter 2"
 		}
 		switch se.Flags {
@@ -76,13 +79,15 @@ func GetSortingResult(se SortEvent) string {
 		}
 
 	case "172.17.172.203":
-		if se.RawPayload[202] == 0x64 {
+		// if se.RawPayload[202] == 0x64 {
+		if se.DstIsRobo {
 			return "Melkroboter 3"
 		}
 		panic("Roboter with ip ..203 can only sort to Melkroboter 3")
 
 	case "172.17.172.204":
-		if se.RawPayload[202] == 0x64 {
+		// if se.RawPayload[202] == 0x64 {
+		if se.DstIsRobo {
 			return "Melkroboter 4"
 		}
 		switch se.Flags {
@@ -173,48 +178,58 @@ func decodeSortEvent(packet gopacket.Packet) SortEvent {
 		"Gate NL":                  1,
 		"Gate HL":                  2,
 		"Gate Ausgang Melkbereich": 3,
+		"Melkroboter 1":            4,
+		"Melkroboter 2":            5,
+		"Melkroboter 3":            6,
+		"Melkroboter 4":            7,
 	}
 
-	var sorting SortEvent
+	var se SortEvent
 	payload := packet.Layer(layers.LayerTypeUDP).LayerPayload()
 
-	sorting.RawPayload = payload
-	sorting.Time = packet.Metadata().Timestamp
-	sorting.IpDst = packet.NetworkLayer().NetworkFlow().Dst()
-	sorting.IpSrc = packet.NetworkLayer().NetworkFlow().Src()
+	if payload[202] != 0x64 {
+		se.DstIsRobo = false
+	} else { // for sortings at the roboter entrance
+		se.DstIsRobo = true
+	}
+
+	se.RawPayload = payload
+	se.Time = packet.Metadata().Timestamp
+	se.IpDst = packet.NetworkLayer().NetworkFlow().Dst()
+	se.IpSrc = packet.NetworkLayer().NetworkFlow().Src()
 	cowNameRaw := payload[20:22]
 	transponderRaw := payload[12:16]
 	indexRaw := payload[4:6]
 	flagsRaw := payload[194:196]
 
 	buf := bytes.NewReader(cowNameRaw)
-	err := binary.Read(buf, binary.BigEndian, &sorting.CowName)
+	err := binary.Read(buf, binary.BigEndian, &se.CowName)
 	check(err)
 
 	buf = bytes.NewReader(transponderRaw)
-	err = binary.Read(buf, binary.BigEndian, &sorting.Transponder)
+	err = binary.Read(buf, binary.BigEndian, &se.Transponder)
 	check(err)
 
 	buf = bytes.NewReader(indexRaw)
-	err = binary.Read(buf, binary.BigEndian, &sorting.Index)
+	err = binary.Read(buf, binary.BigEndian, &se.Index)
 	check(err)
 
 	buf = bytes.NewReader(flagsRaw)
-	err = binary.Read(buf, binary.BigEndian, &sorting.Flags)
+	err = binary.Read(buf, binary.BigEndian, &se.Flags)
 	check(err)
 
-	sorting.SortDst.Name = GetSortingResult(sorting)
-	sorting.SortDst.Id = BarnLocationNameToId[sorting.SortDst.Name]
+	se.SortDst.Name = GetSortingResult(se)
+	se.SortDst.Id = BarnLocationNameToId[se.SortDst.Name]
 
-	if sorting.IpDst.String() != "172.17.172.203" {
-		sorting.Gate.Name = IpToGate(sorting.IpDst.String())
-		sorting.Gate.Id = GateNameToId[sorting.Gate.Name]
+	if !se.DstIsRobo {
+		se.Gate.Name = IpToGate(se.IpDst.String())
+		se.Gate.Id = GateNameToId[se.Gate.Name]
 
-		sorting.SortSrc.Name = GateToOrigin(sorting.Gate.Name)
-		sorting.SortSrc.Id = BarnLocationNameToId[sorting.SortSrc.Name]
+		se.SortSrc.Name = GateToOrigin(se.Gate.Name)
+		se.SortSrc.Id = BarnLocationNameToId[se.SortSrc.Name]
 	}
 
-	return sorting
+	return se
 }
 
 func ShowSortRequest(sr SortRequest) {
@@ -233,6 +248,7 @@ func ShowSortEvent(se SortEvent) {
 	fmt.Println("At gate: ", se.Gate.Name)
 	fmt.Println("Coming from: ", se.SortSrc.Name)
 	fmt.Println("Sorting to: ", se.SortDst.Name)
+	fmt.Println("DstIsRobot: ", se.DstIsRobo)
 }
 
 func ExportSortEvent(se SortEvent, f *os.File) {

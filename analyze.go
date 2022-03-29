@@ -28,6 +28,11 @@ func SortingResultsToStays(seIn <-chan SortEvent, stOut chan<- Stay) {
 	for {
 		// get a new sortEvent from channel
 		se := <-seIn
+		// nextSe := <- seIn
+
+		if se.DstIsRobo || (se.SortDst.Id != 3 && se.SortSrc.Id != 3) { // ignore sortings that have no connection to the waitingArea
+			continue
+		}
 
 		rL, found := cowToLastStay[se.CowName]
 		if !found {
@@ -39,6 +44,7 @@ func SortingResultsToStays(seIn <-chan SortEvent, stOut chan<- Stay) {
 		var stay Stay
 		if rL.IsFirstSE == true {
 			stay.Begin = se.Time
+			stay.CowNr = se.CowName
 			stay.Location = se.SortDst
 
 			rL.IsFirstSE = false
@@ -46,7 +52,16 @@ func SortingResultsToStays(seIn <-chan SortEvent, stOut chan<- Stay) {
 			rL.LastStay = stay
 		} else {
 			if se.SortDst.Id != rL.LastSE.SortDst.Id {
-				rL.LastStay.End = se.Time
+				nextSe := <-seIn
+				for nextSe.DstIsRobo || (se.SortDst.Id != 3 && se.SortSrc.Id != 3) {
+					nextSe = <-seIn
+				}
+
+				if nextSe.SortSrc.Id == se.SortSrc.Id {
+					rL.LastStay.End = nextSe.Time
+				} else {
+					rL.LastStay.End = se.Time
+				}
 
 				if se.SortSrc.Id != rL.LastStay.Location.Id {
 					rL.LastStay.Problem = true
@@ -73,5 +88,5 @@ func (st Stay) Duration() time.Duration {
 }
 
 func ShowStay(st Stay) {
-	fmt.Printf("%v\t%v\t%v\t%v", st.Begin.Format("2006-01-02 15:04:05"), st.CowNr, st.Location.Name, st.Duration())
+	fmt.Printf("%v\t%v\t%v\t%v\n", st.Begin.Format("2006-01-02 15:04:05"), st.CowNr, st.Location.Name, st.Duration())
 }

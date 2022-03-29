@@ -45,15 +45,19 @@ func createDb(dbName string) {
 		insert into GateIdToName values
 		(1, "Gate NL"),
 		(2, "Gate HL"),
-		(3, "Gate Ausgang Melkbereich")`)
+		(3, "Gate Ausgang Melkbereich"),
+		(4, "Melkroboter 1"),
+		(5, "Melkroboter 2"),
+		(6, "Melkroboter 3"),
+		(7, "Melkroboter 4")`)
 	check(err)
 
 	_, err = db.Exec(`create view selections as
 	select id, TimeUnixMilli, "Time", CowNr, GateIdToName.name as GateName, Origin.Name as Origin, Dst.Name as Dst
 	from Sortings
-	join LocationIdToName as Dst on Sortings.SortDst = Dst.locationId
-	join LocationIdToName as Origin on Sortings.SortOri = Origin.locationId
-	join GateIdToName on Sortings.Gate=GateIdToName.gateId`)
+	left join LocationIdToName as Dst on Sortings.SortDst = Dst.locationId
+	left join LocationIdToName as Origin on Sortings.SortOri = Origin.locationId
+	left join GateIdToName on Sortings.Gate=GateIdToName.gateId`)
 	check(err)
 
 	_, err = db.Exec(`create table Stays
@@ -61,9 +65,17 @@ func createDb(dbName string) {
 		Inserted TEXT NOT NULL DEFAULT current_timestamp,
 		Begin TEXT NOT NULL,
 		End TEXT NOT NULL,
-		Duration TEXT NOT NULL,
-		Location INT NOT NULL
-		)`)
+		CowNr INT NOT NULL,
+		Duration INT NOT NULL,
+		Location INT NOT NULL)`)
+	check(err)
+
+	_, err = db.Exec(`create view milkings as 
+		select Stays.Begin, Stays.End, CowNr, Stays.Duration/60 as DurationMinutes, LocationIdToName.name as LocationName
+		from Stays
+		left join LocationIdToName on Location=LocationIdToName.locationId
+		where Location=3
+		order by Id`)
 	check(err)
 
 	db.Close()
@@ -91,8 +103,8 @@ func insertStay(stay Stay, db *sql.DB) {
 	tx, err := db.Begin()
 	check(err)
 
-	_, err = tx.Exec(`INSERT INTO Stays(Begin, End, Duration, Location)
-		 VALUES (?,?,?,?)`, stay.Begin, stay.End, stay.Duration(), stay.Location.Id)
+	_, err = tx.Exec(`INSERT INTO Stays(Begin, End,CowNr, Duration, Location)
+		 VALUES (?,?,?,?,?)`, stay.Begin.Format("2006-01-02 15:04:05"), stay.End.Format("2006-01-02 15:04:05"), stay.CowNr, int(stay.Duration().Seconds()), stay.Location.Id)
 	check(err)
 
 	err = tx.Commit()
