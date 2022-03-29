@@ -14,7 +14,7 @@ type Stay struct {
 	Location int
 }
 
-func getStays(cowName int) []Stay {
+func getStays(seIn) []Stay {
 	sortings := getSortings(cowName)
 
 	stays := make([]Stay, 0)

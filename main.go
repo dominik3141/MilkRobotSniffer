@@ -49,28 +49,32 @@ type Gate struct {
 }
 
 func main() {
+	// command line arguments
 	createNewDb := flag.Bool("createdb", false, "Use this flag if a new database should be created")
 	dbName := flag.String("db", "testdb01.db", "Path to the database")
 	flag.Parse()
 
+	// database stuff
 	if *createNewDb {
 		createDb(*dbName)
 	}
-
 	db := openDb(*dbName)
 	defer db.Close()
 
+	// create channels
 	srChan := make(chan SortEvent, 1e2)
 
+	// start goroutine for saving and displaying sorting events
 	go SaveAndShowSE(srChan, db)
 
+	// start capturing packets and start goroutine to handle packets
 	// pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
 	pcapIn, err := pcap.OpenOffline("20220320_RoboCap03.cap")
 	check(err)
 	packetSource := gopacket.NewPacketSource(pcapIn, pcapIn.LinkType())
-
 	go handlePacket(packetSource.Packets(), srChan)
 
+	// just do nothing, everything that happens now happens in non-main goroutines
 	for {
 		time.Sleep(100 * time.Second)
 	}
