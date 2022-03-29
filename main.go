@@ -48,9 +48,12 @@ type Gate struct {
 	Name string
 }
 
+var verboseFlag *bool
+
 func main() {
 	// command line arguments
 	createNewDb := flag.Bool("createdb", false, "Use this flag if a new database should be created")
+	verboseFlag = flag.Bool("v", true, "Print sort events and stays to the command line")
 	dbName := flag.String("db", "testdb01.db", "Path to the database")
 	flag.Parse()
 
@@ -63,9 +66,17 @@ func main() {
 
 	// create channels
 	srChan := make(chan SortEvent, 1e2)
+	seToStaysChan := make(chan SortEvent, 1e2)
+	staysToSaveChan := make(chan Stay, 1e2)
 
 	// start goroutine for saving and displaying sorting events
-	go SaveAndShowSE(srChan, db)
+	go SaveAndShowSE(srChan, db, seToStaysChan)
+
+	// analyze the SortEvents and convert them into stays
+	go SortingResultsToStays(seToStaysChan, staysToSaveChan)
+
+	// save and display stays
+	go handleStays(staysToSaveChan, db)
 
 	// start capturing packets and start goroutine to handle packets
 	// pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
@@ -80,11 +91,25 @@ func main() {
 	}
 }
 
-func SaveAndShowSE(seIn <-chan SortEvent, db *sql.DB) {
+func SaveAndShowSE(seIn <-chan SortEvent, db *sql.DB, seToStaysChan chan<- SortEvent) {
 	for {
 		se := <-seIn
 		insertSortEvent(se, db)
-		ShowSortEvent(se)
+		if *verboseFlag {
+			ShowSortEvent(se)
+		}
+		seToStaysChan <- se
+	}
+}
+
+func handleStays(stIn <-chan Stay, db *sql.DB) {
+	for {
+		st := <-stIn
+
+		insertStay(st, db)
+		if *verboseFlag {
+			ShowStay(st)
+		}
 	}
 }
 
@@ -101,9 +126,9 @@ func ShowSortEvent(se SortEvent) {
 	fmt.Println(se.IpSrc, "->", se.IpDst)
 	fmt.Println("Transponder: ", se.Transponder)
 	fmt.Println("CowName: ", se.CowName)
-	fmt.Println("At gate: ", se.Gate)
-	fmt.Println("Coming from: ", se.SortSrc)
-	fmt.Println("Sorting to: ", se.SortDst)
+	fmt.Println("At gate: ", se.Gate.Name)
+	fmt.Println("Coming from: ", se.SortSrc.Name)
+	fmt.Println("Sorting to: ", se.SortDst.Name)
 }
 
 func ExportSortEvent(se SortEvent, f *os.File) {
