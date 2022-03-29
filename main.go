@@ -43,7 +43,8 @@ func main() {
 
 	// start capturing packets and start goroutine to handle packets
 	// pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
-	pcapIn, err := pcap.OpenOffline("20220324_RoboCap04.cap")
+	pcapIn, err := pcap.OpenOffline("20220320_RoboCap03.cap")
+	// pcapIn, err := pcap.OpenOffline("20220324_RoboCap04.cap")
 	check(err)
 	packetSource := gopacket.NewPacketSource(pcapIn, pcapIn.LinkType())
 	go handlePacket(packetSource.Packets(), srChan)

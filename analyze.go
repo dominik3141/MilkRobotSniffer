@@ -34,6 +34,10 @@ func SortingResultsToStays(seIn <-chan SortEvent, stOut chan<- Stay) {
 			continue
 		}
 
+		if se.SortDst.Id == 3 && se.SortSrc.Id == 3 { // ignore cows that try to exit the waitingArea but fail
+			continue
+		}
+
 		rL, found := cowToLastStay[se.CowName]
 		if !found {
 			rL = new(recentLocation)
