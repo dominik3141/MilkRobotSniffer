@@ -19,7 +19,7 @@ func createDb(dbName string) {
 		(Id INTEGER PRIMARY KEY AUTOINCREMENT,
 		Inserted TEXT NOT NULL DEFAULT current_timestamp,
 		"Index" INTEGER NOT NULL,
-		TimeUnixMilli INTEGER NOT NULL,
+		TimeUnix INTEGER NOT NULL,
 		"Time" TEXT NOT NULL,
 		Transponder INTEGER NOT NULL,
 		CowNr INTEGER NOT NULL,
@@ -53,7 +53,7 @@ func createDb(dbName string) {
 	check(err)
 
 	_, err = db.Exec(`create view selections as
-	select id, TimeUnixMilli, "Time", CowNr, GateIdToName.name as GateName, Origin.Name as Origin, Dst.Name as Dst
+	select id, "Time", CowNr, GateIdToName.name as GateName, Origin.Name as Origin, Dst.Name as Dst
 	from Sortings
 	left join LocationIdToName as Dst on Sortings.SortDst = Dst.locationId
 	left join LocationIdToName as Origin on Sortings.SortOri = Origin.locationId
@@ -92,8 +92,8 @@ func openDb(dbName string) *sql.DB {
 func insertSortEvent(se SortEvent, db *sql.DB) {
 	tx, err := db.Begin()
 	check(err)
-	_, err = tx.Exec(`INSERT INTO Sortings("Index",TimeUnixMilli, "Time", Transponder, CowNr, SortOri, SortDst, Gate)
-		 VALUES (?,?,?,?,?,?,?,?)`, se.Index, se.Time.UnixMilli(), se.Time.Format("2006-01-02 15:04:05"), se.Transponder, se.CowName, se.SortSrc.Id, se.SortDst.Id, se.Gate.Id)
+	_, err = tx.Exec(`INSERT INTO Sortings("Index",TimeUnix, "Time", Transponder, CowNr, SortOri, SortDst, Gate)
+		 VALUES (?,?,?,?,?,?,?,?)`, se.Index, se.Time.Unix(), se.Time.Format("2006-01-02 15:04:05"), se.Transponder, se.CowName, se.SortSrc.Id, se.SortDst.Id, se.Gate.Id)
 	check(err)
 	err = tx.Commit()
 	check(err)

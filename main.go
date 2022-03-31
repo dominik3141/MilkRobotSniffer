@@ -12,11 +12,13 @@ import (
 )
 
 var verboseFlag *bool
+var takePictures *bool
 
 func main() {
 	// command line arguments
 	createNewDb := flag.Bool("createdb", false, "Use this flag if a new database should be created")
 	verboseFlag = flag.Bool("v", true, "Print sort events and stays to the command line")
+	takePictures = flag.Bool("p", true, "Take pictures of the sortings using the ip cameras")
 	dbName := flag.String("db", "testdb01.db", "Path to the database")
 	flag.Parse()
 
@@ -31,9 +33,15 @@ func main() {
 	srChan := make(chan SortEvent, 1e2)
 	seToStaysChan := make(chan SortEvent, 1e2)
 	staysToSaveChan := make(chan Stay, 1e2)
+	seForPicture := make(chan SortEvent, 1e2)
 
 	// start goroutine for saving and displaying sorting events
-	go SaveAndShowSE(srChan, db, seToStaysChan)
+	go SaveAndShowSE(srChan, db, seToStaysChan, seForPicture)
+
+	// start goroutine for saving pictures of the sorting events
+	if *takePictures {
+		go takePictureRoutine(seForPicture)
+	}
 
 	// analyze the SortEvents and convert them into stays
 	go SortingResultsToStays(seToStaysChan, staysToSaveChan)
@@ -43,8 +51,7 @@ func main() {
 
 	// start capturing packets and start goroutine to handle packets
 	// pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
-	pcapIn, err := pcap.OpenOffline("20220320_RoboCap03.cap")
-	// pcapIn, err := pcap.OpenOffline("20220324_RoboCap04.cap")
+	pcapIn, err := pcap.OpenOffline("20220329_RoboCap06.cap")
 	check(err)
 	packetSource := gopacket.NewPacketSource(pcapIn, pcapIn.LinkType())
 	go handlePacket(packetSource.Packets(), srChan)
@@ -55,9 +62,20 @@ func main() {
 	}
 }
 
-func SaveAndShowSE(seIn <-chan SortEvent, db *sql.DB, seToStaysChan chan<- SortEvent) {
+func takePictureRoutine(picSeIn <-chan SortEvent) {
+	for {
+		se := <-picSeIn
+		// we could now check if the cow is flagged in some way...
+		takePicture(se)
+	}
+}
+
+func SaveAndShowSE(seIn <-chan SortEvent, db *sql.DB, seToStaysChan chan<- SortEvent, seForPictures chan<- SortEvent) {
 	for {
 		se := <-seIn
+		if *takePictures {
+			seForPictures <- se
+		}
 		insertSortEvent(se, db)
 		if *verboseFlag {
 			ShowSortEvent(se)

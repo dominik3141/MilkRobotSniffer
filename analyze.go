@@ -12,80 +12,134 @@ type Stay struct {
 	Begin    time.Time
 	End      time.Time
 	Location BarnLocation
-	Problem  bool // set this if a strange thing has been detected, like a cow leaving a location it never entered
 }
 
-type recentLocation struct {
-	IsFirstSE bool
-	LastStay  Stay
-	LastSE    SortEvent
-}
+// type recentLocation struct {
+// 	CurrStay Stay
+// 	LastSE   SortEvent
+// 	CurrSE   SortEvent
+// 	NextSE   SortEvent
+// 	Wait     bool
+// }
 
 func SortingResultsToStays(seIn <-chan SortEvent, stOut chan<- Stay) {
 	// keep the most recent stay and the most recent SortEvent of each cow in memory
-	cowToLastStay := make(map[int16]*recentLocation)
+	cowToLastStay := make(map[int16]*Stay)
 
 	for {
 		// get a new sortEvent from channel
 		se := <-seIn
-		// nextSe := <- seIn
 
-		if se.DstIsRobo || (se.SortDst.Id != 3 && se.SortSrc.Id != 3) { // ignore sortings that have no connection to the waitingArea
+		if se.DstIsRobo || (se.SortDst.Id != 3 && se.SortSrc.Id != 3) || (se.SortDst.Id == 3 && se.SortSrc.Id == 3) { // ignore sortings that have no connection to the waitingArea
 			continue
 		}
 
-		if se.SortDst.Id == 3 && se.SortSrc.Id == 3 { // ignore cows that try to exit the waitingArea but fail
-			continue
-		}
-
-		rL, found := cowToLastStay[se.CowName]
+		stay, found := cowToLastStay[se.CowName]
 		if !found {
-			rL = new(recentLocation)
-			rL.IsFirstSE = true
-			cowToLastStay[se.CowName] = rL
-		}
-
-		var stay Stay
-		if rL.IsFirstSE == true {
+			stay := new(Stay)
 			stay.Begin = se.Time
 			stay.CowNr = se.CowName
 			stay.Location = se.SortDst
 
-			rL.IsFirstSE = false
-			rL.LastSE = se
-			rL.LastStay = stay
-		} else {
-			if se.SortDst.Id != rL.LastSE.SortDst.Id {
-				nextSe := <-seIn
-				for nextSe.DstIsRobo || (se.SortDst.Id != 3 && se.SortSrc.Id != 3) {
-					nextSe = <-seIn
-				}
-
-				if nextSe.SortSrc.Id == se.SortSrc.Id {
-					rL.LastStay.End = nextSe.Time
-				} else {
-					rL.LastStay.End = se.Time
-				}
-
-				if se.SortSrc.Id != rL.LastStay.Location.Id {
-					rL.LastStay.Problem = true
-				}
-
-				// save last stay before overwriting
-				stOut <- rL.LastStay
-
-				stay.CowNr = se.CowName
-				stay.Begin = se.Time
-				stay.Location = se.SortDst
-
-				// overwrite most recent stay
-				rL.LastStay = stay
-			} else { // so se.SortDst.Id == rL.LastSE.SortDst.Id
-				rL.LastStay.Begin = se.Time
-			}
+			cowToLastStay[se.CowName] = stay
+			continue
 		}
+
+		if se.SortSrc.Id != stay.Location.Id {
+			stay = new(Stay)
+			stay.CowNr = se.CowName
+			stay.Location = se.SortDst
+			stay.Begin = se.Time
+			cowToLastStay[se.CowName] = stay
+
+			continue
+		}
+
+		if se.SortDst.Id == stay.Location.Id {
+			stay.Begin = se.Time
+			continue
+		}
+
+		stay.End = se.Time
+		stOut <- *stay
+
+		stay = new(Stay)
+		stay.CowNr = se.CowName
+		stay.Location = se.SortDst
+		stay.Begin = se.Time
+		cowToLastStay[se.CowName] = stay
 	}
 }
+
+// func SortingResultsToStays(seIn <-chan SortEvent, stOut chan<- Stay) {
+// 	// keep the most recent stay and the most recent SortEvent of each cow in memory
+// 	cowToLastStay := make(map[int16]*recentLocation)
+
+// 	for {
+// 		// get a new sortEvent from channel
+// 		se := <-seIn
+
+// 		if se.DstIsRobo || (se.SortDst.Id != 3 && se.SortSrc.Id != 3) { // ignore sortings that have no connection to the waitingArea
+// 			continue
+// 		}
+
+// 		rL, found := cowToLastStay[se.CowName]
+// 		if !found {
+// 			rL = new(recentLocation)
+
+// 			var stay Stay
+// 			stay.Begin = se.Time
+// 			stay.CowNr = se.CowName
+// 			stay.Location = se.SortDst
+
+// 			rL.NextSE = se
+// 			rL.CurrStay = stay
+// 			rL.Wait = true
+
+// 			cowToLastStay[se.CowName] = rL
+
+// 			continue
+// 		}
+
+// 		if rL.Wait {
+// 			rL.CurrSE = rL.NextSE
+// 			rL.NextSE = se
+// 			rL.Wait = false
+// 			continue
+// 		}
+
+// 		rL.LastSE = rL.CurrSE
+// 		rL.CurrSE = rL.NextSE
+// 		rL.NextSE = se
+
+// 		se = rL.CurrSE
+// 		if se.SortDst.Id != rL.LastSE.SortDst.Id {
+
+// 			if rL.NextSE.SortSrc.Id == se.SortSrc.Id {
+// 				rL.CurrStay.End = rL.NextSE.Time
+// 			} else {
+// 				rL.CurrStay.End = se.Time
+// 			}
+
+// 			if se.SortSrc.Id != rL.CurrStay.Location.Id {
+// 				rL.CurrStay.Problem = true
+// 			}
+
+// 			// save last stay before overwriting
+// 			stOut <- rL.CurrStay
+
+// 			var stay Stay
+// 			stay.CowNr = se.CowName
+// 			stay.Begin = se.Time
+// 			stay.Location = se.SortDst
+
+// 			// overwrite most recent stay
+// 			rL.CurrStay = stay
+// 		} else { // so se.SortDst.Id == rL.LastSE.SortDst.Id
+// 			rL.CurrStay.Begin = se.Time
+// 		}
+// 	}
+// }
 
 func (st Stay) Duration() time.Duration {
 	return st.End.Sub(st.Begin)
