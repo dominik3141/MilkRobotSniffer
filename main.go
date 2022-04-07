@@ -50,8 +50,8 @@ func main() {
 	go handleStays(staysToSaveChan, db)
 
 	// start capturing packets and start goroutine to handle packets
-	// pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
-	pcapIn, err := pcap.OpenOffline("20220329_RoboCap06.cap")
+	pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
+	// pcapIn, err := pcap.OpenOffline("20220329_RoboCap06.cap")
 	check(err)
 	packetSource := gopacket.NewPacketSource(pcapIn, pcapIn.LinkType())
 	go handlePacket(packetSource.Packets(), srChan)
@@ -65,8 +65,11 @@ func main() {
 func takePictureRoutine(picSeIn <-chan SortEvent) {
 	for {
 		se := <-picSeIn
+
 		// we could now check if the cow is flagged in some way...
-		takePicture(se)
+		if se.Gate.Id == 3 || se.Gate.Id == 2 {
+			takePicture(se)
+		}
 	}
 }
 
