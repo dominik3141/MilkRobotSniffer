@@ -25,6 +25,7 @@ func createDb(dbName string) {
 		CowNr INTEGER NOT NULL,
 		SortOri INTEGER NOT NULL,
 		SortDst INTEGER NOT NULL,
+		PictureObjName TEXT,
 		Gate INTEGER NOT NULL)`)
 	check(err)
 
@@ -78,6 +79,21 @@ func createDb(dbName string) {
 		order by Id`)
 	check(err)
 
+	_, err = db.Exec(`CREATE VIEW gateAverage as
+		with tempTable as (
+		select count(id) as cnt, GateName, CowNr
+		from selections 
+		group by GateName, CowNr
+		--having cnt > 1
+		having datetime("time") > datetime("now", "-24 hours")
+		order by CowNr
+		)
+
+		select Gatename, avg(cnt) as av
+		from tempTable
+		group by Gatename`)
+	check(err)
+
 	db.Close()
 }
 
@@ -89,11 +105,11 @@ func openDb(dbName string) *sql.DB {
 	return db
 }
 
-func insertSortEvent(se SortEvent, db *sql.DB) {
+func insertSortEvent(se SortEvent, pictureObjName string, db *sql.DB) {
 	tx, err := db.Begin()
 	check(err)
-	_, err = tx.Exec(`INSERT INTO Sortings("Index",TimeUnix, "Time", Transponder, CowNr, SortOri, SortDst, Gate)
-		 VALUES (?,?,?,?,?,?,?,?)`, se.Index, se.Time.Unix(), se.Time.Format("2006-01-02 15:04:05"), se.Transponder, se.CowName, se.SortSrc.Id, se.SortDst.Id, se.Gate.Id)
+	_, err = tx.Exec(`INSERT INTO Sortings("Index",TimeUnix, "Time", Transponder, CowNr, SortOri, SortDst, Gate, pictureObjName)
+		 VALUES (?,?,?,?,?,?,?,?,?)`, se.Index, se.Time.Unix(), se.Time.Format("2006-01-02 15:04:05"), se.Transponder, se.CowName, se.SortSrc.Id, se.SortDst.Id, se.Gate.Id, pictureObjName)
 	check(err)
 	err = tx.Commit()
 	check(err)

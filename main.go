@@ -4,22 +4,27 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"github.com/google/gopacket/pcapgo"
 )
 
 var verboseFlag *bool
 var takePictures *bool
+var savePcap *bool
 
 func main() {
 	// command line arguments
 	createNewDb := flag.Bool("createdb", false, "Use this flag if a new database should be created")
 	verboseFlag = flag.Bool("v", true, "Print sort events and stays to the command line")
 	takePictures = flag.Bool("p", true, "Take pictures of the sortings using the ip cameras")
-	dbName := flag.String("db", "testdb01.db", "Path to the database")
+	savePcap = flag.Bool("w", true, "Wheter to save a pcap file containing the unfiltered raw packets")
+	dbName := flag.String("db", "testdb02.db", "Path to the database")
 	flag.Parse()
 
 	// database stuff
@@ -39,9 +44,9 @@ func main() {
 	go SaveAndShowSE(srChan, db, seToStaysChan, seForPicture)
 
 	// start goroutine for saving pictures of the sorting events
-	if *takePictures {
-		go takePictureRoutine(seForPicture)
-	}
+	// if *takePictures {
+	// 	go takePictureRoutine(seForPicture)
+	// }
 
 	// analyze the SortEvents and convert them into stays
 	go SortingResultsToStays(seToStaysChan, staysToSaveChan)
@@ -62,24 +67,31 @@ func main() {
 	}
 }
 
-func takePictureRoutine(picSeIn <-chan SortEvent) {
-	for {
-		se := <-picSeIn
+// func takePictureRoutine(picSeIn <-chan SortEvent) {
+// 	for {
+// 		se := <-picSeIn
 
-		// we could now check if the cow is flagged in some way...
-		if se.Gate.Id == 3 || se.Gate.Id == 2 {
-			takePicture(se)
-		}
-	}
-}
+// 		// we could now check if the cow is flagged in some way...
+// 		if se.Gate.Id == 3 || se.Gate.Id == 2 {
+// 			takePicture(se)
+// 		}
+// 	}
+// }
 
 func SaveAndShowSE(seIn <-chan SortEvent, db *sql.DB, seToStaysChan chan<- SortEvent, seForPictures chan<- SortEvent) {
 	for {
 		se := <-seIn
-		if *takePictures {
-			seForPictures <- se
+		var objName string
+		// if *takePictures {
+		// 	seForPictures <- se
+		objName = takePicture(se)
+		if objName == "" {
+			fmt.Println("Empty object name")
+		} else {
+			fmt.Println(objName)
 		}
-		insertSortEvent(se, db)
+		// }
+		insertSortEvent(se, objName, db)
 		if *verboseFlag {
 			ShowSortEvent(se)
 		}
@@ -99,8 +111,30 @@ func handleStays(stIn <-chan Stay, db *sql.DB) {
 }
 
 func handlePacket(packetsChan <-chan gopacket.Packet, srChan chan<- SortEvent) {
+	var pcapw *pcapgo.Writer
+	// init pcap file
+	if *savePcap {
+		filename := fmt.Sprintf("raw_%v.pcap", time.Now().Format("2006-01-02_15-04-05"))
+		f, err := os.Create(filename)
+		check(err)
+		defer f.Close()
+
+		pcapw = pcapgo.NewWriter(f)
+		if err := pcapw.WriteFileHeader(1600, layers.LinkTypeEthernet); err != nil {
+			log.Fatalf("WriteFileHeader: %v", err)
+		}
+	}
+
 	for {
 		packet := <-packetsChan
+
+		// save packet
+		if *savePcap {
+			err := pcapw.WritePacket(packet.Metadata().CaptureInfo, packet.Data())
+			if err != nil {
+				fmt.Println("ERROR:", err)
+			}
+		}
 
 		if udp := packet.Layer(layers.LayerTypeUDP); udp != nil && len(udp.LayerPayload()) > 4 {
 			if udp.LayerPayload()[0] == 0x00 && udp.LayerPayload()[1] == 0x05 && udp.LayerPayload()[2] == 0x01 && udp.LayerPayload()[3] == 0x0a {
