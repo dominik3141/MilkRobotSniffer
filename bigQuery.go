@@ -15,9 +15,10 @@ type bqSortingEvent struct {
 	SortSrc     int
 	SortDst     int
 	Gate        int
+	// PictureName string
 }
 
-func bqInsertSE(u *bigquery.Inserter, se SortEvent) {
+func bqInsertSE(u *bigquery.Inserter, se SortEvent, pictureName string) {
 	row := bqSortingEvent{
 		Timestamp:   se.Time,
 		CowName:     se.CowName,
@@ -25,6 +26,7 @@ func bqInsertSE(u *bigquery.Inserter, se SortEvent) {
 		SortSrc:     se.SortSrc.Id,
 		SortDst:     se.SortDst.Id,
 		Gate:        se.Gate.Id,
+		// PictureName: pictureName,
 	}
 
 	err := u.Put(context.Background(), row)

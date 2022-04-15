@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"fmt"
 	"log"
@@ -22,20 +21,12 @@ var bqInserter *bigquery.Inserter
 
 func main() {
 	// command line arguments
-	createNewDb := flag.Bool("createdb", false, "Use this flag if a new database should be created")
 	verboseFlag = flag.Bool("v", true, "Print sort events and stays to the command line")
 	takePictures = flag.Bool("p", false, "Take pictures of the sortings using the ip cameras")
 	savePcap = flag.Bool("w", false, "Wheter to save a pcap file containing the unfiltered raw packets")
-	dbName := flag.String("db", "testdb02.db", "Path to the database")
 	flag.Parse()
 
-	// database stuff
-	if *createNewDb {
-		createDb(*dbName)
-	}
-	db := openDb(*dbName)
-	defer db.Close()
-
+	// Get an inserter for the BigQuery table
 	bqInserter = bqInit()
 
 	// create channels
@@ -45,7 +36,7 @@ func main() {
 	seForPicture := make(chan SortEvent, 1e2)
 
 	// start goroutine for saving and displaying sorting events
-	go SaveAndShowSE(srChan, db, seToStaysChan, seForPicture)
+	go SaveAndShowSE(srChan, seToStaysChan, seForPicture)
 
 	// start goroutine for saving pictures of the sorting events
 	if *takePictures {
@@ -56,7 +47,7 @@ func main() {
 	go SortingResultsToStays(seToStaysChan, staysToSaveChan)
 
 	// save and display stays
-	go handleStays(staysToSaveChan, db)
+	go handleStays(staysToSaveChan)
 
 	// start capturing packets and start goroutine to handle packets
 	// pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
@@ -71,12 +62,19 @@ func main() {
 	}
 }
 
-func SaveAndShowSE(seIn <-chan SortEvent, db *sql.DB, seToStaysChan chan<- SortEvent, seForPictures chan<- SortEvent) {
+func takePictureRoutine(seIn <-chan SortEvent) {
+	for {
+		se := <-seIn
+
+		takePicture(se)
+	}
+}
+
+func SaveAndShowSE(seIn <-chan SortEvent, seToStaysChan chan<- SortEvent, seForPictures chan<- SortEvent) {
 	for {
 		se := <-seIn
 		var objName string
 		if *takePictures {
-			// 	seForPictures <- se
 			objName = takePicture(se)
 			if objName == "" {
 				fmt.Println("Empty object name")
@@ -84,8 +82,7 @@ func SaveAndShowSE(seIn <-chan SortEvent, db *sql.DB, seToStaysChan chan<- SortE
 				fmt.Println(objName)
 			}
 		}
-		// insertSortEvent(se, objName, db)
-		bqInsertSE(bqInserter, se)
+		bqInsertSE(bqInserter, se, objName)
 		if *verboseFlag {
 			ShowSortEvent(se)
 		}
@@ -93,11 +90,11 @@ func SaveAndShowSE(seIn <-chan SortEvent, db *sql.DB, seToStaysChan chan<- SortE
 	}
 }
 
-func handleStays(stIn <-chan Stay, db *sql.DB) {
+func handleStays(stIn <-chan Stay) {
 	for {
 		st := <-stIn
 
-		insertStay(st, db)
+		// insertStay(st, db)
 		if *verboseFlag {
 			ShowStay(st)
 		}
