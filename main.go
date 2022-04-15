@@ -48,9 +48,9 @@ func main() {
 	go SaveAndShowSE(srChan, db, seToStaysChan, seForPicture)
 
 	// start goroutine for saving pictures of the sorting events
-	// if *takePictures {
-	// 	go takePictureRoutine(seForPicture)
-	// }
+	if *takePictures {
+		go takePictureRoutine(seForPicture)
+	}
 
 	// analyze the SortEvents and convert them into stays
 	go SortingResultsToStays(seToStaysChan, staysToSaveChan)
