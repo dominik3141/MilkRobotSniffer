@@ -49,7 +49,6 @@ type Gate struct {
 func GetSortingResult(se SortEvent) string {
 	switch se.IpDst.String() {
 	case "172.17.172.201":
-		// if se.RawPayload[202] == 0x64 {
 		if se.DstIsRobo {
 			return "Melkroboter 1"
 		}
@@ -63,7 +62,6 @@ func GetSortingResult(se SortEvent) string {
 		}
 
 	case "172.17.172.202":
-		// if se.RawPayload[202] == 0x64 {
 		if se.DstIsRobo {
 			return "Melkroboter 2"
 		}
@@ -79,14 +77,12 @@ func GetSortingResult(se SortEvent) string {
 		}
 
 	case "172.17.172.203":
-		// if se.RawPayload[202] == 0x64 {
 		if se.DstIsRobo {
 			return "Melkroboter 3"
 		}
 		panic("Roboter with ip ..203 can only sort to Melkroboter 3")
 
 	case "172.17.172.204":
-		// if se.RawPayload[202] == 0x64 {
 		if se.DstIsRobo {
 			return "Melkroboter 4"
 		}

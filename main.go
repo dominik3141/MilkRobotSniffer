@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"cloud.google.com/go/bigquery"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
@@ -17,13 +18,14 @@ import (
 var verboseFlag *bool
 var takePictures *bool
 var savePcap *bool
+var bqInserter *bigquery.Inserter
 
 func main() {
 	// command line arguments
 	createNewDb := flag.Bool("createdb", false, "Use this flag if a new database should be created")
 	verboseFlag = flag.Bool("v", true, "Print sort events and stays to the command line")
-	takePictures = flag.Bool("p", true, "Take pictures of the sortings using the ip cameras")
-	savePcap = flag.Bool("w", true, "Wheter to save a pcap file containing the unfiltered raw packets")
+	takePictures = flag.Bool("p", false, "Take pictures of the sortings using the ip cameras")
+	savePcap = flag.Bool("w", false, "Wheter to save a pcap file containing the unfiltered raw packets")
 	dbName := flag.String("db", "testdb02.db", "Path to the database")
 	flag.Parse()
 
@@ -33,6 +35,8 @@ func main() {
 	}
 	db := openDb(*dbName)
 	defer db.Close()
+
+	bqInserter = bqInit()
 
 	// create channels
 	srChan := make(chan SortEvent, 1e2)
@@ -55,8 +59,8 @@ func main() {
 	go handleStays(staysToSaveChan, db)
 
 	// start capturing packets and start goroutine to handle packets
-	pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
-	// pcapIn, err := pcap.OpenOffline("20220329_RoboCap06.cap")
+	// pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
+	pcapIn, err := pcap.OpenOffline("data/20220320_RoboCap03.cap")
 	check(err)
 	packetSource := gopacket.NewPacketSource(pcapIn, pcapIn.LinkType())
 	go handlePacket(packetSource.Packets(), srChan)
@@ -67,31 +71,21 @@ func main() {
 	}
 }
 
-// func takePictureRoutine(picSeIn <-chan SortEvent) {
-// 	for {
-// 		se := <-picSeIn
-
-// 		// we could now check if the cow is flagged in some way...
-// 		if se.Gate.Id == 3 || se.Gate.Id == 2 {
-// 			takePicture(se)
-// 		}
-// 	}
-// }
-
 func SaveAndShowSE(seIn <-chan SortEvent, db *sql.DB, seToStaysChan chan<- SortEvent, seForPictures chan<- SortEvent) {
 	for {
 		se := <-seIn
 		var objName string
-		// if *takePictures {
-		// 	seForPictures <- se
-		objName = takePicture(se)
-		if objName == "" {
-			fmt.Println("Empty object name")
-		} else {
-			fmt.Println(objName)
+		if *takePictures {
+			// 	seForPictures <- se
+			objName = takePicture(se)
+			if objName == "" {
+				fmt.Println("Empty object name")
+			} else {
+				fmt.Println(objName)
+			}
 		}
-		// }
-		insertSortEvent(se, objName, db)
+		// insertSortEvent(se, objName, db)
+		bqInsertSE(bqInserter, se)
 		if *verboseFlag {
 			ShowSortEvent(se)
 		}
