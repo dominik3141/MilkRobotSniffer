@@ -36,7 +36,7 @@ func main() {
 	flag.Parse()
 
 	// Get an inserter for the BigQuery table
-	bqInserter = bqInit()
+	bqInserter = bqInitSE()
 
 	// database stuff
 	if *createNewDb {
