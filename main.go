@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
@@ -23,30 +24,34 @@ var verboseFlag *bool
 var takePictures *bool
 var savePcap *bool
 var bqInserter *bigquery.Inserter
+var db *sql.DB
 
 func main() {
 	// command line arguments
+	createNewDb := flag.Bool("createdb", false, "Use this flag if a new database should be created")
 	verboseFlag = flag.Bool("v", true, "Print sort events and stays to the command line")
 	takePictures = flag.Bool("p", false, "Take pictures of the sortings using the ip cameras")
-	savePcap = flag.Bool("w", true, "Wheter to save a pcap file containing the unfiltered raw packets")
+	savePcap = flag.Bool("w", false, "Wheter to save a pcap file containing the unfiltered raw packets")
+	dbName := flag.String("db", "sortings01.db", "Path to the database")
 	flag.Parse()
 
 	// Get an inserter for the BigQuery table
 	bqInserter = bqInit()
 
+	// database stuff
+	if *createNewDb {
+		createDb(*dbName)
+	}
+	db = openDb(*dbName)
+	defer db.Close()
+
 	// create channels
 	srChan := make(chan SortEvent, defaultChanBuffer)
 	seToStaysChan := make(chan SortEvent, defaultChanBuffer)
 	staysToSaveChan := make(chan Stay, defaultChanBuffer)
-	seForPicture := make(chan SortEvent, defaultChanBuffer)
 
 	// start goroutine for saving and displaying sorting events
-	go SaveAndShowSE(srChan, seToStaysChan, seForPicture)
-
-	// start goroutine for saving pictures of the sorting events
-	// if *takePictures {
-	// 	go takePictureRoutine(seForPicture)
-	// }
+	go SaveAndShowSE(srChan, seToStaysChan)
 
 	// analyze the SortEvents and convert them into stays
 	go SortingResultsToStays(seToStaysChan, staysToSaveChan)
@@ -67,17 +72,7 @@ func main() {
 	}
 }
 
-// func takePictureRoutine(seIn <-chan SortEvent) {
-// 	for {
-// 		se := <-seIn
-
-// 		takePicture(se)
-// 	}
-// }
-
-func SaveAndShowSE(seIn <-chan SortEvent, seToStaysChan chan<- SortEvent, seForPictures chan<- SortEvent) {
-	// chanPubSub := make(chan *SortEvent, defaultChanBuffer)
-	// go sendToPubSub(chanPubSub)
+func SaveAndShowSE(seIn <-chan SortEvent, seToStaysChan chan<- SortEvent) {
 	gcpStorageClient := initTakePicture()
 
 	for {
@@ -95,7 +90,7 @@ func SaveAndShowSE(seIn <-chan SortEvent, seToStaysChan chan<- SortEvent, seForP
 			}
 		}
 		bqInsertSE(bqInserter, se, objName)
-		// chanPubSub <- &se
+		insertSortEvent(se, objName, db)
 		if *verboseFlag {
 			ShowSortEvent(se)
 		}
@@ -103,47 +98,11 @@ func SaveAndShowSE(seIn <-chan SortEvent, seToStaysChan chan<- SortEvent, seForP
 	}
 }
 
-// func sendToPubSub(seIn <-chan *SortEvent) {
-// 	// create context
-// 	ctx := context.Background()
-
-// 	// create client
-// 	client, err := pubsub.NewClient(ctx, "rahnfarrgbr", option.WithCredentialsFile(gcpCred))
-// 	check(err)
-
-// 	// get topic
-// 	topic := client.Topic("seTestTmp")
-// 	defer topic.Stop()
-
-// 	type seMsg struct {
-// 		Time        time.Time
-// 		CowNr       int
-// 		Transponder int
-// 	}
-
-// 	for {
-// 		se := <-seIn
-// 		seMsg := seMsg{
-// 			Time:        se.Time,
-// 			CowNr:       int(se.CowName),
-// 			Transponder: int(se.Transponder),
-// 		}
-// 		seJson, err := json.Marshal(seMsg)
-// 		check(err)
-
-// 		// send SortingEvent to pub/sub
-// 		topic.Publish(ctx, &pubsub.Message{
-// 			Data: seJson,
-// 		})
-// 		// publish happens asynchronous
-// 	}
-// }
-
 func handleStays(stIn <-chan Stay) {
 	for {
 		st := <-stIn
 
-		// insertStay(st, db)
+		insertStay(st, db)
 		if *verboseFlag {
 			ShowStay(st)
 		}

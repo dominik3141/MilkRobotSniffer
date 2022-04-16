@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 
@@ -55,7 +54,12 @@ func takePicture(se SortEvent, client *storage.Client) (string, error) {
 		return "", err
 	}
 
-	picture, err := io.ReadAll(resp.Body)
+	picture := make([]byte, resp.ContentLength)
+	n, err := resp.Body.Read(picture)
+	if n != int(resp.ContentLength) {
+		fmt.Println("ERROR: n!=resp.ContentLength")
+		panic("ERROR")
+	}
 
 	hash := sha1.Sum(picture)
 	logger.Printf("Attempting to save file with hash: %x\n", hash)
@@ -71,7 +75,7 @@ func takePicture(se SortEvent, client *storage.Client) (string, error) {
 	w := obj.NewWriter(ctx)
 
 	// write to the object
-	n, err := w.Write(picture)
+	n, err = w.Write(picture)
 	logger.Printf("Wrote %v bytes to bucket\n", n)
 
 	// close object

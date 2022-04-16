@@ -15,7 +15,7 @@ type bqSortingEvent struct {
 	SortSrc     int
 	SortDst     int
 	Gate        int
-	// PictureName string
+	PictureName string
 }
 
 func bqInsertSE(u *bigquery.Inserter, se SortEvent, pictureName string) {
@@ -26,7 +26,7 @@ func bqInsertSE(u *bigquery.Inserter, se SortEvent, pictureName string) {
 		SortSrc:     se.SortSrc.Id,
 		SortDst:     se.SortDst.Id,
 		Gate:        se.Gate.Id,
-		// PictureName: pictureName,
+		PictureName: pictureName,
 	}
 
 	err := u.Put(context.Background(), row)

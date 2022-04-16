@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/google/gopacket"
@@ -245,8 +244,4 @@ func ShowSortEvent(se SortEvent) {
 	fmt.Println("Coming from: ", se.SortSrc.Name)
 	fmt.Println("Sorting to: ", se.SortDst.Name)
 	fmt.Println("DstIsRobot: ", se.DstIsRobo)
-}
-
-func ExportSortEvent(se SortEvent, f *os.File) {
-	fmt.Fprintf(f, "%v,%v,%v,%v,%v,%v\n", se.Time, se.Transponder, se.CowName, se.SortSrc.Id, se.SortDst.Id, se.Gate.Id)
 }
