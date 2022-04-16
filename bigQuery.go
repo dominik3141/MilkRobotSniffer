@@ -35,7 +35,7 @@ func bqInsertSE(u *bigquery.Inserter, se SortEvent, pictureName string) {
 
 func bqInit() *bigquery.Inserter {
 	ctx := context.Background()
-	client, err := bigquery.NewClient(ctx, "rahnfarrgbr", option.WithCredentialsFile("cowCounterCredentials.json"))
+	client, err := bigquery.NewClient(ctx, "rahnfarrgbr", option.WithCredentialsFile(gcpCred))
 	check(err)
 
 	dataset := client.Dataset("CowCounter")

@@ -14,6 +14,11 @@ import (
 	"github.com/google/gopacket/pcapgo"
 )
 
+const (
+	gcpCred           = "cowCounterCredentials.json"
+	defaultChanBuffer = 1e2
+)
+
 var verboseFlag *bool
 var takePictures *bool
 var savePcap *bool
@@ -23,25 +28,25 @@ func main() {
 	// command line arguments
 	verboseFlag = flag.Bool("v", true, "Print sort events and stays to the command line")
 	takePictures = flag.Bool("p", false, "Take pictures of the sortings using the ip cameras")
-	savePcap = flag.Bool("w", false, "Wheter to save a pcap file containing the unfiltered raw packets")
+	savePcap = flag.Bool("w", true, "Wheter to save a pcap file containing the unfiltered raw packets")
 	flag.Parse()
 
 	// Get an inserter for the BigQuery table
 	bqInserter = bqInit()
 
 	// create channels
-	srChan := make(chan SortEvent, 1e2)
-	seToStaysChan := make(chan SortEvent, 1e2)
-	staysToSaveChan := make(chan Stay, 1e2)
-	seForPicture := make(chan SortEvent, 1e2)
+	srChan := make(chan SortEvent, defaultChanBuffer)
+	seToStaysChan := make(chan SortEvent, defaultChanBuffer)
+	staysToSaveChan := make(chan Stay, defaultChanBuffer)
+	seForPicture := make(chan SortEvent, defaultChanBuffer)
 
 	// start goroutine for saving and displaying sorting events
 	go SaveAndShowSE(srChan, seToStaysChan, seForPicture)
 
 	// start goroutine for saving pictures of the sorting events
-	if *takePictures {
-		go takePictureRoutine(seForPicture)
-	}
+	// if *takePictures {
+	// 	go takePictureRoutine(seForPicture)
+	// }
 
 	// analyze the SortEvents and convert them into stays
 	go SortingResultsToStays(seToStaysChan, staysToSaveChan)
@@ -62,20 +67,27 @@ func main() {
 	}
 }
 
-func takePictureRoutine(seIn <-chan SortEvent) {
-	for {
-		se := <-seIn
+// func takePictureRoutine(seIn <-chan SortEvent) {
+// 	for {
+// 		se := <-seIn
 
-		takePicture(se)
-	}
-}
+// 		takePicture(se)
+// 	}
+// }
 
 func SaveAndShowSE(seIn <-chan SortEvent, seToStaysChan chan<- SortEvent, seForPictures chan<- SortEvent) {
+	// chanPubSub := make(chan *SortEvent, defaultChanBuffer)
+	// go sendToPubSub(chanPubSub)
+	gcpStorageClient := initTakePicture()
+
 	for {
 		se := <-seIn
 		var objName string
 		if *takePictures {
-			objName = takePicture(se)
+			objName, err := takePicture(se, gcpStorageClient)
+			if err != nil {
+				fmt.Println("ERROR:", err)
+			}
 			if objName == "" {
 				fmt.Println("Empty object name")
 			} else {
@@ -83,12 +95,49 @@ func SaveAndShowSE(seIn <-chan SortEvent, seToStaysChan chan<- SortEvent, seForP
 			}
 		}
 		bqInsertSE(bqInserter, se, objName)
+		// chanPubSub <- &se
 		if *verboseFlag {
 			ShowSortEvent(se)
 		}
 		seToStaysChan <- se
 	}
 }
+
+// func sendToPubSub(seIn <-chan *SortEvent) {
+// 	// create context
+// 	ctx := context.Background()
+
+// 	// create client
+// 	client, err := pubsub.NewClient(ctx, "rahnfarrgbr", option.WithCredentialsFile(gcpCred))
+// 	check(err)
+
+// 	// get topic
+// 	topic := client.Topic("seTestTmp")
+// 	defer topic.Stop()
+
+// 	type seMsg struct {
+// 		Time        time.Time
+// 		CowNr       int
+// 		Transponder int
+// 	}
+
+// 	for {
+// 		se := <-seIn
+// 		seMsg := seMsg{
+// 			Time:        se.Time,
+// 			CowNr:       int(se.CowName),
+// 			Transponder: int(se.Transponder),
+// 		}
+// 		seJson, err := json.Marshal(seMsg)
+// 		check(err)
+
+// 		// send SortingEvent to pub/sub
+// 		topic.Publish(ctx, &pubsub.Message{
+// 			Data: seJson,
+// 		})
+// 		// publish happens asynchronous
+// 	}
+// }
 
 func handleStays(stIn <-chan Stay) {
 	for {

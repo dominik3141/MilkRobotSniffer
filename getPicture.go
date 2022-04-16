@@ -1,58 +1,82 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
+	"crypto/sha1"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-	"os"
+
+	"cloud.google.com/go/storage"
+	"google.golang.org/api/option"
 )
 
-type GCPObjId struct {
-	ObjName string `json:"ObjName"`
+var logger *log.Logger
+var ctx context.Context
+var bkt *storage.BucketHandle
+
+func initTakePicture() *storage.Client {
+	// init connection
+	// create context
+	ctx = context.Background()
+
+	// create client
+	client, err := storage.NewClient(ctx, option.WithCredentialsFile(gcpCred))
+	check(err)
+
+	return client
 }
 
-func takePicture(se SortEvent) string {
-	if !(se.Gate.Id == 3 || se.Gate.Id == 2) {
-		return ""
+func takePicture(se SortEvent, client *storage.Client) (string, error) {
+	var camIp string
+	switch se.Gate.Id {
+	case 1:
+		camIp = "172.19.60.75"
+	case 2:
+		camIp = "172.19.60.76"
+	case 3:
+		camIp = "172.19.60.75"
+	case 4:
+		camIp = "172.19.60.71"
+	case 5:
+		camIp = "172.19.60.72"
+	case 6:
+		camIp = "172.19.60.73"
+	case 7:
+		camIp = "172.19.60.74"
+	default:
+		return "", errors.New("Unknown camIp.")
 	}
 
-	bodyBytes, err := json.Marshal(se)
-	if err != nil && err != io.EOF {
-		fmt.Println("ERROR:", err)
-		return ""
+	resp, err := http.Get("http://rahnfarr:rahnfarr@" + camIp + "/jpg/image.jpg?size=3")
+	if err != nil {
+		return "", err
 	}
 
-	bodyReader := bytes.NewBuffer(bodyBytes)
+	picture, err := io.ReadAll(resp.Body)
 
-	resp, err := http.Post("http://172.19.60.40:1208/api/takePicture", "application/json", bodyReader)
-	if err != nil && err != io.EOF {
-		fmt.Println("ERROR:", err)
-		return ""
-	} else {
-		// defer resp.Body.Close()
-		_, err = io.Copy(os.Stdout, resp.Body)
-		if err != nil && err != io.EOF {
-			fmt.Println("ERROR:", err)
-			return ""
-		}
-		fmt.Printf("\n")
-	}
+	hash := sha1.Sum(picture)
+	logger.Printf("Attempting to save file with hash: %x\n", hash)
+	objName := fmt.Sprintf("%x", hash)
 
-	var objName GCPObjId
-	buf := make([]byte, 1024)
-	n, err := resp.Body.Read(buf)
-	fmt.Printf("Read %v bytes from body\n", n)
-	if err != nil && err != io.EOF {
-		fmt.Println("ERROR:", err)
-		return ""
-	}
-	err = json.Unmarshal(buf, &objName)
-	if err != nil && err != io.EOF {
-		fmt.Println("ERROR:", err)
-		return ""
-	}
+	// get bucket
+	bkt = client.Bucket("selectionpictures")
 
-	return objName.ObjName
+	// create an object handle
+	obj := bkt.Object(objName)
+
+	// create an io.Writer for the object
+	w := obj.NewWriter(ctx)
+
+	// write to the object
+	n, err := w.Write(picture)
+	logger.Printf("Wrote %v bytes to bucket\n", n)
+
+	// close object
+	err = w.Close()
+	check(err)
+
+	return objName, nil
 }
