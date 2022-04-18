@@ -94,6 +94,16 @@ func createDb(dbName string) {
 		group by Gatename`)
 	check(err)
 
+	_, err = db.Exec(`CREATE VIEW waitAverage as
+		with tempTable as (
+			select datetime("begin") as t, CowNr, DurationMinutes as w
+			from milkings
+		)
+		select date("t") as day, avg(w) as av
+		from tempTable
+		group by day`)
+	check(err)
+
 	db.Close()
 }
 

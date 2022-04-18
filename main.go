@@ -21,14 +21,17 @@ const (
 )
 
 var verboseFlag *bool
+var saveToBq *bool
 var takePictures *bool
 var savePcap *bool
-var bqInserter *bigquery.Inserter
+var bqSortingsInserter *bigquery.Inserter
+var bqStaysInserter *bigquery.Inserter
 var db *sql.DB
 
 func main() {
 	// command line arguments
 	createNewDb := flag.Bool("createdb", false, "Use this flag if a new database should be created")
+	saveToBq = flag.Bool("g", false, "Save sortings and stays to BigQuery table")
 	verboseFlag = flag.Bool("v", true, "Print sort events and stays to the command line")
 	takePictures = flag.Bool("p", false, "Take pictures of the sortings using the ip cameras")
 	savePcap = flag.Bool("w", false, "Wheter to save a pcap file containing the unfiltered raw packets")
@@ -36,7 +39,9 @@ func main() {
 	flag.Parse()
 
 	// Get an inserter for the BigQuery table
-	bqInserter = bqInitSE()
+	if *saveToBq {
+		bqSortingsInserter, bqStaysInserter = bqInit()
+	}
 
 	// database stuff
 	if *createNewDb {
@@ -61,7 +66,7 @@ func main() {
 
 	// start capturing packets and start goroutine to handle packets
 	// pcapIn, err := pcap.OpenLive("eth0", 400, true, pcap.BlockForever)
-	pcapIn, err := pcap.OpenOffline("data/20220320_RoboCap03.cap")
+	pcapIn, err := pcap.OpenOffline("data/20220324_RoboCap04.cap")
 	check(err)
 	packetSource := gopacket.NewPacketSource(pcapIn, pcapIn.LinkType())
 	go handlePacket(packetSource.Packets(), srChan)
@@ -77,23 +82,21 @@ func SaveAndShowSE(seIn <-chan SortEvent, seToStaysChan chan<- SortEvent) {
 
 	for {
 		se := <-seIn
-		var objName string
-		if *takePictures {
-			objName, err := takePicture(se, gcpStorageClient)
-			if err != nil {
-				fmt.Println("ERROR:", err)
-			}
-			if objName == "" {
-				fmt.Println("Empty object name")
-			} else {
-				fmt.Println(objName)
-			}
-		}
-		bqInsertSE(bqInserter, se, objName)
-		insertSortEvent(se, objName, db)
 		if *verboseFlag {
 			ShowSortEvent(se)
 		}
+		var objName string
+		var err error
+		if *takePictures {
+			objName, err = takePicture(se, gcpStorageClient)
+			if err != nil {
+				fmt.Println("ERROR:", err)
+			}
+		}
+		if *saveToBq {
+			bqInsertSE(bqSortingsInserter, se, objName)
+		}
+		insertSortEvent(se, objName, db)
 		seToStaysChan <- se
 	}
 }
@@ -103,6 +106,9 @@ func handleStays(stIn <-chan Stay) {
 		st := <-stIn
 
 		insertStay(st, db)
+		if *saveToBq {
+			bqInsertStay(bqStaysInserter, st)
+		}
 		if *verboseFlag {
 			ShowStay(st)
 		}
@@ -179,6 +185,7 @@ func ShowPacketInfo(packet gopacket.Packet) {
 
 func check(err error) {
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+		// panic(err)
 	}
 }

@@ -18,6 +18,13 @@ type bqSortingEvent struct {
 	PictureName string
 }
 
+type bqStay struct {
+	CowNr    int16
+	Begin    time.Time
+	End      time.Time
+	Location int
+}
+
 func bqInsertSE(u *bigquery.Inserter, se SortEvent, pictureName string) {
 	row := bqSortingEvent{
 		Timestamp:   se.Time,
@@ -33,20 +40,35 @@ func bqInsertSE(u *bigquery.Inserter, se SortEvent, pictureName string) {
 	check(err)
 }
 
-func bqInitSE() *bigquery.Inserter {
+func bqInsertStay(u *bigquery.Inserter, stay Stay) {
+	bqSt := bqStay{
+		CowNr:    stay.CowNr,
+		Begin:    stay.Begin,
+		End:      stay.End,
+		Location: stay.Location.Id,
+	}
+
+	err := u.Put(context.Background(), bqSt)
+	check(err)
+}
+
+func bqInit() (*bigquery.Inserter, *bigquery.Inserter) {
 	ctx := context.Background()
 	client, err := bigquery.NewClient(ctx, "rahnfarrgbr", option.WithCredentialsFile(gcpCred))
 	check(err)
 
 	dataset := client.Dataset("CowCounter")
-	table := dataset.Table("sortings")
 
-	u := table.Inserter()
-	return u
+	table1 := dataset.Table("sortings")
+	u1 := table1.Inserter()
+
+	table2 := dataset.Table("stays")
+	u2 := table2.Inserter()
+	return u1, u2
 }
 
 // bqInitDb creates a new dataset and a new table with a schema infered from
-// the bqSortingEvent struct
+// the corresponding struct
 func bqInitTables(client *bigquery.Client) {
 	ctx := context.Background()
 
@@ -69,7 +91,7 @@ func bqInitTables(client *bigquery.Client) {
 	table = dataset.Table("stays")
 
 	// construct schema
-	schema, err = bigquery.InferSchema(Stay{})
+	schema, err = bigquery.InferSchema(bqStay{})
 	check(err)
 
 	// create table with schema

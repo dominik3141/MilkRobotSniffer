@@ -5,14 +5,13 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
-	"log"
+	"io"
 	"net/http"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/option"
 )
 
-var logger *log.Logger
 var ctx context.Context
 var bkt *storage.BucketHandle
 
@@ -55,14 +54,17 @@ func takePicture(se SortEvent, client *storage.Client) (string, error) {
 	}
 
 	picture := make([]byte, resp.ContentLength)
-	n, err := resp.Body.Read(picture)
+	n, err := io.ReadFull(resp.Body, picture)
+	if err != nil {
+		return "", err
+	}
 	if n != int(resp.ContentLength) {
 		fmt.Println("ERROR: n!=resp.ContentLength")
-		panic("ERROR")
+		return "", err
 	}
 
 	hash := sha1.Sum(picture)
-	logger.Printf("Attempting to save file with hash: %x\n", hash)
+	fmt.Printf("Attempting to save file with hash: %x\n", hash)
 	objName := fmt.Sprintf("%x", hash)
 
 	// get bucket
@@ -76,7 +78,7 @@ func takePicture(se SortEvent, client *storage.Client) (string, error) {
 
 	// write to the object
 	n, err = w.Write(picture)
-	logger.Printf("Wrote %v bytes to bucket\n", n)
+	fmt.Printf("Wrote %v bytes to bucket\n", n)
 
 	// close object
 	err = w.Close()
