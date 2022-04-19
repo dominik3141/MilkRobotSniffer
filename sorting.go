@@ -234,14 +234,22 @@ func ShowSortRequest(sr SortRequest) {
 	fmt.Println("Transponder: ", sr.Transponder)
 }
 
+// func ShowSortEvent(se SortEvent) {
+// 	fmt.Printf("\n\n")
+// 	fmt.Println("Time: ", se.Time.Format("2006-01-02 15:04:05"))
+// 	fmt.Println(se.IpSrc, "->", se.IpDst)
+// 	fmt.Println("Transponder: ", se.Transponder)
+// 	fmt.Println("CowName: ", se.CowName)
+// 	fmt.Println("At gate: ", se.Gate.Name)
+// 	fmt.Println("Coming from: ", se.SortSrc.Name)
+// 	fmt.Println("Sorting to: ", se.SortDst.Name)
+// 	fmt.Println("DstIsRobot: ", se.DstIsRobo)
+// }
+
 func ShowSortEvent(se SortEvent) {
-	fmt.Printf("\n\n")
-	fmt.Println("Time: ", se.Time.Format("2006-01-02 15:04:05"))
-	fmt.Println(se.IpSrc, "->", se.IpDst)
-	fmt.Println("Transponder: ", se.Transponder)
-	fmt.Println("CowName: ", se.CowName)
-	fmt.Println("At gate: ", se.Gate.Name)
-	fmt.Println("Coming from: ", se.SortSrc.Name)
-	fmt.Println("Sorting to: ", se.SortDst.Name)
-	fmt.Println("DstIsRobot: ", se.DstIsRobo)
+	if se.DstIsRobo {
+		fmt.Printf("Time: %v\tCow: %v\tGate: %v\n", se.Time.Format("2006-01-02 15:04:05"), se.CowName, se.Gate.Name)
+	} else {
+		fmt.Printf("Time: %v\tCow: %v\t %v -> %v\n", se.Time.Format("2006-01-02 15:04:05"), se.CowName, se.SortSrc.Name, se.SortDst.Name)
+	}
 }
