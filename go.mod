@@ -5,6 +5,7 @@ go 1.18
 require (
 	cloud.google.com/go/bigquery v1.31.0
 	cloud.google.com/go/storage v1.22.0
+	github.com/go-redis/redis/v8 v8.11.5
 	github.com/google/gopacket v1.1.19
 	github.com/mattn/go-sqlite3 v1.14.12
 	google.golang.org/api v0.74.0
@@ -14,6 +15,8 @@ require (
 	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.5.0 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
+	github.com/cespare/xxhash/v2 v2.1.2 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.7 // indirect
