@@ -1,16 +1,13 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/go-redis/redis"
 	_ "github.com/mattn/go-sqlite3"
 )
-
-// const cowToLastStayBackupFileName = "cowToLastStay.gob"
 
 type Stay struct {
 	CowNr    int16
@@ -25,44 +22,36 @@ func (st Stay) MarshalBinary() ([]byte, error) {
 	return bytes, err
 }
 
-// func backupMap(mapp map[int16]*Stay, rdb *redis.Client) {
-// 	// f, err := os.Create(cowToLastStayBackupFileName)
-// 	// check(err)
-
-// 	var b bytes.Buffer
-
-// 	encoder := gob.NewEncoder(&b)
-// 	encoder.Encode(mapp)
-
-// 	rdb.Set(context.Background(), "cowToLastStay", )
-// }
-
 func SortingResultsToStays(seIn <-chan SortEvent, stOut chan<- Stay) {
-	// check if there is a serialized backup of the cowToLastStay map
-	// and load the file if it exists
-	// f, err := os.Open(cowToLastStayBackupFileName)
-
-	// ...
-
-	// keep the most recent stay and the most recent SortEvent of each cow in memory
-	cowToLastStay := make(map[int16]*Stay)
-
 	// get connection to redisDB
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
 		Password: "", // no password set
 		DB:       0,  // use default DB
 	})
-	ctx := context.Background()
+
+	// keep the most recent stay and the most recent SortEvent of each cow in memory
+	var cowToLastStay map[int16]*Stay
+	if *useRedisBackup {
+		val, err := rdb.Get("cowToLastStay").Bytes()
+		check(err)
+		err = json.Unmarshal(val, &cowToLastStay)
+		check(err)
+	} else {
+		cowToLastStay = make(map[int16]*Stay)
+	}
 
 	for {
-		cowsInMilkingArea := getCowsInMilkingArea(&cowToLastStay)
-		fmt.Println(cowsInMilkingArea)
+		// backup cowToLastStay map to redis
+		rdb.Set("cowToLastStay", cowToLastStay, 0)
 
+		cowsInMilkingArea := getCowsInMilkingArea(&cowToLastStay)
+		fmt.Println("Cows in milkingArea:", len(cowsInMilkingArea))
 		// save list of cows in milkingArea to redis
+		// this is not the same as the backup of the cowToLastStay map!
 		cowsInMilkingAreaJson, err := json.MarshalIndent(cowsInMilkingArea, "", "\t")
 		check(err)
-		err = rdb.Set(ctx, "cowsInMilkingArea", cowsInMilkingAreaJson, 0).Err()
+		err = rdb.Set("cowsInMilkingArea", cowsInMilkingAreaJson, 0).Err()
 		check(err)
 
 		// get a new sortEvent from channel

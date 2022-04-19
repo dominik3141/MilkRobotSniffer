@@ -22,6 +22,7 @@ const (
 
 var verboseFlag *bool
 var saveToBq *bool
+var useRedisBackup *bool
 var takePictures *bool
 var savePcap *bool
 var bqSortingsInserter *bigquery.Inserter
@@ -32,6 +33,7 @@ func main() {
 	// command line arguments
 	createNewDb := flag.Bool("createdb", false, "Use this flag if a new database should be created")
 	saveToBq = flag.Bool("g", false, "Save sortings and stays to BigQuery table")
+	useRedisBackup = flag.Bool("redisBackup", false, "Get initial cowToLastStay map from redis")
 	verboseFlag = flag.Bool("v", true, "Print sort events and stays to the command line")
 	takePictures = flag.Bool("p", false, "Take pictures of the sortings using the ip cameras")
 	savePcap = flag.Bool("w", false, "Wheter to save a pcap file containing the unfiltered raw packets")
